@@ -1,0 +1,68 @@
+name: Flutter Android preview
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Pinned official Flutter SDK
+        run: |
+          git clone --depth 1 --branch 3.47.7 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          test "$(git -C "$RUNNER_TEMP/flutter" rev-parse HEAD)" = abaf9c523780a608bd46686fd5e53740a07077f8
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" config --no-analytics
+      - name: Android and Rust toolchains
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865'
+          rustup show
+          rustup target add aarch64-linux-android x86_64-linux-android
+      - name: Dart and native checks
+        run: |
+          flutter pub get --enforce-lockfile
+          dart format --output=none --set-exit-if-changed lib test integration_test
+          flutter analyze
+          flutter test test
+          cd native
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked --all-targets
+      - name: Native ARM64 and x86_64
+        run: |
+          sh scripts/build-native.sh
+          git diff --exit-code -- assets/native_licenses.json
+      - name: APK and Android checks
+        run: |
+          flutter build apk --release --target lib/main.dart --target-platform android-arm64,android-x64 --split-per-abi
+          cd android
+          ./gradlew :app:testDebugUnitTest :app:lintRelease
+      - name: Package verifiable preview artifacts
+        run: |
+          mkdir -p build/preview
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/preview/xunara-android-preview-arm64-v8a.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk build/preview/xunara-android-preview-x86_64.apk
+          for package in build/preview/*.apk; do
+            "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$package" >/dev/null
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$package"
+          done
+          core=$(sed -n 's@^source = "git+https://github.com/xunara-net/xunara-client.*#\([0-9a-f]*\)"@\1@p' native/Cargo.lock)
+          test -n "$core"
+          jq -n --arg source "$GITHUB_SHA" --arg core "$core" \
+            '{source:$source,core_source:$core,flutter:"3.47.7",rust:"1.98.1",ndk:"29.0.14206865",signing:"test-only",minimum_android_api:26,abis:["arm64-v8a","x86_64"],physical_device_verified:false}' > build/preview/BUILD.json
+          (cd build/preview && sha256sum ./*.apk BUILD.json > SHA256SUMS && sha256sum --check SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-preview
+          path: build/preview/

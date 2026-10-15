@@ -1,0 +1,32 @@
+[package]
+name = "xunara-android-native"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[lib]
+name = "xunara_android"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow = "1"
+jni = "=0.21.1"
+ipnet = "2"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "net", "time", "sync"] }
+xunara-client = { git = "https://github.com/xunara-net/xunara-client", rev = "454987dc15a9b08a3f4f0822591267673d0f25a3" }
+zeroize = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
