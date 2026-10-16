@@ -1,0 +1,69 @@
+import 'models.dart';
+
+class InstalledApplication {
+  const InstalledApplication({
+    required this.packageName,
+    required this.label,
+    this.installed = true,
+  });
+  factory InstalledApplication.fromJson(Map<String, dynamic> json) =>
+      InstalledApplication(
+        packageName: json['package'] as String,
+        label: json['label'] as String,
+        installed: json['installed'] as bool,
+      );
+  final String packageName;
+  final String label;
+  final bool installed;
+}
+
+class SystemDiagnostics {
+  const SystemDiagnostics({
+    required this.androidSdk,
+    required this.androidVersion,
+    required this.appVersion,
+    required this.coreVersion,
+    required this.vpnPermission,
+    required this.notificationsEnabled,
+    required this.batteryUnrestricted,
+    required this.backgroundRestricted,
+  });
+  factory SystemDiagnostics.fromJson(Map<String, dynamic> json) =>
+      SystemDiagnostics(
+        androidSdk: json['android_sdk'] as int,
+        androidVersion: json['android_version'] as String,
+        appVersion: json['app_version'] as String,
+        coreVersion: json['core_version'] as String,
+        vpnPermission: json['vpn_permission'] as bool,
+        notificationsEnabled: json['notifications_enabled'] as bool,
+        batteryUnrestricted: json['battery_unrestricted'] as bool,
+        backgroundRestricted: json['background_restricted'] as bool,
+      );
+  final int androidSdk;
+  final String androidVersion;
+  final String appVersion;
+  final String coreVersion;
+  final bool vpnPermission;
+  final bool notificationsEnabled;
+  final bool batteryUnrestricted;
+  final bool backgroundRestricted;
+
+  String report(VpnSnapshot snapshot, ClientProfile profile) => [
+    '玄序 Android 连接诊断',
+    '应用 $appVersion · 内核 $coreVersion',
+    'Android $androidVersion · SDK $androidSdk',
+    '连接状态：${snapshot.phase.label}',
+    '底层网络：${snapshot.networkLabel.isEmpty ? '尚未观察到' : snapshot.networkLabel}',
+    '系统 VPN 权限：${vpnPermission ? '已允许' : '待允许'}',
+    '状态通知：${notificationsEnabled ? '已开启' : '未开启'}',
+    '电池优化：${batteryUnrestricted ? '不受优化限制' : '由系统管理'}',
+    '后台限制：${backgroundRestricted ? '受限制' : '未限制'}',
+    '应用分流：${profile.appRouting.label} · 已选择 ${profile.applications.length} 个',
+    '远程子网：${profile.acceptRoutes ? '接收已批准路由' : '关闭'}',
+    '切网重连：${profile.autoReconnect ? '开启' : '关闭'}',
+    '可见设备：${snapshot.devices.length} · 跳过冲突路由：${snapshot.skippedRoutes.length}',
+    '发送 ${formatBytes(snapshot.bytesSent)} · 接收 ${formatBytes(snapshot.bytesReceived)}',
+    '未导出服务器地址、设备名称、IP、应用清单、授权链接或密钥。',
+    '这是本机状态摘要，不代表已验证服务器或业务端口连通。',
+  ].join('\n');
+}

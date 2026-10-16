@@ -33,5 +33,11 @@ attempt=0
 until curl --noproxy '*' --max-time 2 -fsS -X POST http://127.0.0.1:18080/_test/approve >"$directory/approve.json" 2>/dev/null; do
     attempt=$((attempt+1)); [ "$attempt" -lt 100 ] || exit 1; sleep 0.2
 done
+router_ipv6=$(curl --noproxy '*' --max-time 3 -fsS 'http://127.0.0.1:18080/_test/node?host=rust-router' | jq -r .ipv6)
+attempt=0
+until ip -6 address show dev xunara0 2>/dev/null | grep -Fq "$router_ipv6/"; do
+    attempt=$((attempt+1)); [ "$attempt" -lt 100 ] || exit 1; sleep 0.2
+done
+"$fixture" -mode http -listen "[$router_ipv6]:8088" >"$directory/http-ipv6.log" 2>&1 & pids="$pids $!"
 touch "$directory/namespace-ready"
 wait

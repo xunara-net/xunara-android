@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:xunara_android/models.dart';
 import 'package:xunara_android/vpn_gateway.dart';
+import 'package:xunara_android/system_diagnostics.dart';
 
 class FakeGateway implements VpnGateway {
   ClientProfile profile = const ClientProfile(
@@ -15,13 +16,72 @@ class FakeGateway implements VpnGateway {
   String receivedKey = '';
   int pingCalls = 0;
   Future<PingResult>? pingResponse;
+  final Map<String, ClientProfile> savedProfiles = {};
+  int profileChanges = 0;
+  int batteryCalls = 0;
+  bool bootstrapUnavailable = false;
+  List<InstalledApplication> applicationList = const [
+    InstalledApplication(packageName: 'com.example.nas', label: '家庭 NAS'),
+    InstalledApplication(packageName: 'com.example.browser', label: '浏览器'),
+  ];
   @override
-  Future<Bootstrap> bootstrap() async => Bootstrap(profile, current, '0.1.0');
+  Future<Bootstrap> bootstrap() async {
+    if (bootstrapUnavailable) {
+      throw PlatformException(code: 'UNAVAILABLE', message: '系统读取暂时不可用');
+    }
+    return Bootstrap(
+      profile,
+      current,
+      '0.1.0',
+      profiles: savedProfiles.isEmpty
+          ? [profile]
+          : savedProfiles.values.toList(),
+    );
+  }
+
   @override
   Future<VpnSnapshot> snapshot() async => current;
   @override
-  Future<ClientProfile> saveProfile(ClientProfile profile) async =>
-      this.profile = profile;
+  Future<ClientProfile> saveProfile(ClientProfile profile) async {
+    profileChanges++;
+    savedProfiles[this.profile.server] = this.profile;
+    savedProfiles[profile.server] = profile;
+    current = const VpnSnapshot();
+    return this.profile = profile;
+  }
+
+  @override
+  Future<void> selectProfile(String server) async {
+    profileChanges++;
+    profile = savedProfiles[server]!;
+    current = const VpnSnapshot();
+  }
+
+  @override
+  Future<void> forgetProfile(String server) async {
+    profileChanges++;
+    savedProfiles.remove(server);
+  }
+
+  @override
+  Future<List<InstalledApplication>> applications() async => applicationList;
+  @override
+  Future<SystemDiagnostics> systemDiagnostics() async =>
+      const SystemDiagnostics(
+        androidSdk: 36,
+        androidVersion: '16',
+        appVersion: '0.2.0',
+        coreVersion: '0.1.0',
+        vpnPermission: true,
+        notificationsEnabled: false,
+        batteryUnrestricted: false,
+        backgroundRestricted: true,
+      );
+  @override
+  Future<void> batterySettings() async {
+    batteryCalls++;
+  }
+
   @override
   Future<void> connect({String authKey = ''}) async {
     connectCalls++;

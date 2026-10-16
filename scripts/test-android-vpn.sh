@@ -41,10 +41,11 @@ done
 curl --noproxy '*' --max-time 4 -fsS 'http://127.0.0.1:18080/_test/node?host=rust-router' >/dev/null
 cd "$root"
 flutter build apk --debug --target integration_test/vpn_test.dart --target-platform android-x64 >"$directory/build.log" 2>&1
-"$adb" -s "$serial" install -r build/app/outputs/flutter-apk/app-debug.apk >/dev/null
+# 专用模拟器可能已装 split-per-ABI 预览包；只允许本轮 Debug 测试包降级，保留身份用于升级迁移验收。
+"$adb" -s "$serial" install -r -d build/app/outputs/flutter-apk/app-debug.apk >/dev/null
 # 密钥只从 stdin 写入测试应用私有缓存，既不出现在 argv，也不编译进 APK。
 "$adb" -s "$serial" shell "run-as net.xunara.android sh -c 'umask 077; cat > cache/integration-auth-key'" <"$directory/auth-key"
-flutter test integration_test/vpn_test.dart -d "$serial" --timeout 6m >"$directory/integration.log" 2>&1 & integration=$!; pids="$pids $integration"
+flutter test integration_test/vpn_test.dart -d "$serial" --timeout 10m >"$directory/integration.log" 2>&1 & integration=$!; pids="$pids $integration"
 attempt=0
 until "$adb" -s "$serial" shell run-as net.xunara.android cat cache/integration-connected >"$directory/android-connected.json" 2>/dev/null; do
     attempt=$((attempt+1)); [ "$attempt" -lt 100 ] || { cat "$directory/integration.log"; exit 1; }
@@ -63,12 +64,16 @@ until "$adb" -s "$serial" shell run-as net.xunara.android cat cache/integration-
 done
 printf 'PASS Android VpnService + TS2021 / Noise 注册与真实 TUN\n'
 router_ip=$(curl --noproxy '*' --max-time 3 -fsS 'http://127.0.0.1:18080/_test/node?host=rust-router' | jq -r .ipv4)
+router_ipv6=$(curl --noproxy '*' --max-time 3 -fsS 'http://127.0.0.1:18080/_test/node?host=rust-router' | jq -r .ipv6)
 "$adb" -s "$serial" shell ping -c 2 -W 4 "$router_ip" >"$directory/ping.log"
 printf 'PASS Android 其他 UID 的加密 ICMP 经真实 TUN\n'
 fetch() { "$adb" -s "$serial" shell "printf 'GET / HTTP/1.0\r\n\r\n' | nc -w 8 $1 $2"; }
 fetch "$router_ip" 8088 >"$directory/tcp.log"
 grep -q xunara-core-ok "$directory/tcp.log"
 printf 'PASS Android ↔ Rust TCP 经证书指纹校验的 DERP\n'
+"$adb" -s "$serial" shell "printf 'GET / HTTP/1.0\r\n\r\n' | nc -6 -w 8 $router_ipv6 8088" >"$directory/tcp-ipv6.log"
+grep -q xunara-core-ok "$directory/tcp-ipv6.log"
+printf 'PASS Android 其他 UID 的 IPv6 TCP 经真实 TUN / DERP\n'
 if fetch "$router_ip" 8089 2>/dev/null | grep -q xunara-core-ok; then echo 'ACL 意外放行禁止端口' >&2; exit 1; fi
 printf 'PASS 拒绝的 ACL 端口\n'
 fetch 192.168.90.2 8088 >"$directory/subnet.log"
@@ -128,6 +133,22 @@ wait_marker cancel-ready
 wait_marker cancel-stopped
 "$adb" -s "$serial" shell 'svc wifi enable; svc data enable'
 "$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-network-restored
+wait_marker routing-only
+fetch "$router_ip" 8088 >"$directory/only-tcp.log"
+grep -q xunara-core-ok "$directory/only-tcp.log"
+printf 'PASS 仅选中 shell UID 的真实 TUN / TCP，原机器身份不变\n'
+"$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-routing-only-verified
+wait_marker routing-excluded
+if fetch "$router_ip" 8088 2>/dev/null | grep -q xunara-core-ok; then echo '排除应用仍被 VPN 接管' >&2; exit 1; fi
+printf 'PASS 排除 shell UID 后无法通过 VPN 访问私有设备\n'
+"$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-routing-excluded-verified
+wait_marker routing-restored
+fetch "$router_ip" 8088 >"$directory/restored-tcp.log"
+grep -q xunara-core-ok "$directory/restored-tcp.log"
+fetch 192.168.90.2 8088 >"$directory/restored-subnet.log"
+grep -q xunara-core-ok "$directory/restored-subnet.log"
+printf 'PASS 所选应用消失时失败关闭，恢复全部应用后 TCP / 子网恢复\n'
+"$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-routing-restored-verified
 wait "$integration"
 if grep -q 'DATA RACE' "$directory/fixture.log"; then echo 'fixture 检测到竞态' >&2; exit 1; fi
 printf 'PASS 主动断开取消自动重连、流量计数与不再提供 Auth Key 的身份重连\n'

@@ -4,22 +4,26 @@ import '../app_controller.dart';
 import '../models.dart';
 
 class ProfileEditor extends StatefulWidget {
-  const ProfileEditor({required this.controller, super.key});
+  const ProfileEditor({
+    required this.controller,
+    this.newServer = false,
+    super.key,
+  });
   final AppController controller;
+  final bool newServer;
   @override
   State<ProfileEditor> createState() => _ProfileEditorState();
 }
 
 class _ProfileEditorState extends State<ProfileEditor> {
   final _form = GlobalKey<FormState>();
-  late final _server = TextEditingController(
-    text: widget.controller.profile!.server,
-  );
-  late final _hostname = TextEditingController(
-    text: widget.controller.profile!.hostname,
-  );
-  late bool _routes = widget.controller.profile!.acceptRoutes;
-  late bool _reconnect = widget.controller.profile!.autoReconnect;
+  late final _base = widget.newServer
+      ? ClientProfile(server: '', hostname: widget.controller.profile!.hostname)
+      : widget.controller.profile!;
+  late final _server = TextEditingController(text: _base.server);
+  late final _hostname = TextEditingController(text: _base.hostname);
+  late bool _routes = _base.acceptRoutes;
+  late bool _reconnect = _base.autoReconnect;
   bool _saving = false;
   String? _error;
 
@@ -32,7 +36,16 @@ class _ProfileEditorState extends State<ProfileEditor> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('网络设置')),
+    appBar: AppBar(title: Text(widget.newServer ? '添加服务器' : '网络设置')),
+    bottomNavigationBar: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: FilledButton(
+          onPressed: _saving ? null : _save,
+          child: Text(_saving ? '正在保存' : '保存设置'),
+        ),
+      ),
+    ),
     body: SafeArea(
       child: Form(
         key: _form,
@@ -105,11 +118,6 @@ class _ProfileEditorState extends State<ProfileEditor> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
-            const SizedBox(height: 28),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: Text(_saving ? '正在保存' : '保存设置'),
-            ),
           ],
         ),
       ),
@@ -120,7 +128,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
     if (!_form.currentState!.validate()) return;
     setState(() => _saving = true);
     final saved = await widget.controller.save(
-      ClientProfile(
+      _base.copyWith(
         server: _server.text.trim(),
         hostname: _hostname.text.trim(),
         acceptRoutes: _routes,

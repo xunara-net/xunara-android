@@ -33,6 +33,7 @@ class XunaraVpnService : VpnService() {
     private var destroyed = false
     private var reconnects = 0
     private var initialKey = ""
+    private var appRouting = AppRouting()
     private val initialTimeout = Runnable { if (generation == 0L && worker == null) disconnect("尚无可用网络，请联网后重试") }
     private val restart = Runnable {
         val snapshot = monitor?.snapshot ?: return@Runnable
@@ -58,8 +59,7 @@ class XunaraVpnService : VpnService() {
         stopMessage = null
         reconnects = 0
         generation = 0
-        val preferences = getSharedPreferences("profile", MODE_PRIVATE)
-        val profile = runCatching { Profile(preferences.getString("server", "") ?: "", preferences.getString("hostname", "android") ?: "android", preferences.getBoolean("accept_routes", true), preferences.getBoolean("auto_reconnect", true)).validated() }.getOrElse {
+        val profile = runCatching { ProfileStore(this).read().current }.getOrElse {
             VpnState.finish("请先填写服务器地址"); stopSelf(); return START_NOT_STICKY
         }
         if (prepare(this) != null) { VpnState.finish("尚未取得系统 VPN 授权"); stopSelf(); return START_NOT_STICKY }
@@ -74,6 +74,7 @@ class XunaraVpnService : VpnService() {
         configuration = JSONObject().put("server", profile.server).put("hostname", profile.hostname)
             .put("accept_routes", profile.acceptRoutes).put("state_dir", directory.absolutePath)
             .put("interface", "xunara0").put("listen", "0.0.0.0:0").toString()
+        appRouting = profile.appRouting
         policy = ReconnectPolicy(profile.autoReconnect)
         // 只等本次用户操作的首次网络就绪，不把密钥写入偏好设置或用于自动重连。
         initialKey = authKey
@@ -126,8 +127,10 @@ class XunaraVpnService : VpnService() {
         val builder = Builder().setSession("玄序 · 私有组网").setMtu(configuration.getInt("mtu")).setBlocking(false)
             .setConfigureIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
         builder.allowFamily(OsConstants.AF_INET).allowFamily(OsConstants.AF_INET6)
-        // 自身不走 VPN，保护系统 DNS 查询与浏览器回到 App 后的管理请求；外层 TCP/UDP 另逐个 protect。
-        builder.addDisallowedApplication(packageName)
+        val applicationPlan = ApplicationInventory.plan(this, appRouting)
+        // Builder 的允许/排除清单互斥；仅选中模式不添加自身，外层 socket 仍逐个 protect。
+        applicationPlan.allowed.forEach { builder.addAllowedApplication(it) }
+        applicationPlan.disallowed.forEach { builder.addDisallowedApplication(it) }
         val addresses = configuration.getJSONArray("addresses")
         for (index in 0 until addresses.length()) {
             val (address, prefix) = splitPrefix(addresses.getString(index))

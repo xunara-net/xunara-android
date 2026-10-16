@@ -24,8 +24,25 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "net.xunara.android/vpn").setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
-                    "bootstrap" -> result.success(JSONObject().put("profile", profileJson()).put("snapshot", JSONObject(VpnState.snapshot())).put("core_version", NativeBridge.version()).toString())
+                    "bootstrap" -> {
+                        val catalog = ProfileStore(this).read()
+                        result.success(JSONObject().put("profile", ProfileStore.toJson(catalog.current))
+                            .put("profiles", org.json.JSONArray(catalog.profiles.map(ProfileStore::toJson)))
+                            .put("snapshot", JSONObject(VpnState.snapshot())).put("core_version", NativeBridge.version()).toString())
+                    }
                     "snapshot" -> result.success(VpnState.snapshot())
+                    "systemDiagnostics" -> result.success(SystemDiagnostics.read(this))
+                    "batterySettings" -> {
+                        startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        result.success(null)
+                    }
+                    "applications" -> {
+                        val selected = currentProfile().appRouting.packages
+                        diagnostics.execute {
+                            val response = runCatching { ApplicationInventory.list(this, selected) }
+                            runOnUiThread { response.fold({ result.success(it) }, { result.error("APPLICATIONS_UNAVAILABLE", "应用清单暂时无法读取，请重试", null) }) }
+                        }
+                    }
                     "ping" -> {
                         check(VpnState.phase() == "connected") { "请先连接网络" }
                         val peer = call.argument<String>("peer_id") ?: ""
@@ -43,15 +60,29 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     "saveProfile" -> {
-                        check(VpnState.phase() in setOf("disconnected", "error")) { "请先断开连接再修改网络设置" }
-                        val profile = Profile(call.argument<String>("server") ?: "", call.argument<String>("hostname") ?: "", call.argument<Boolean>("accept_routes") ?: true, call.argument<Boolean>("auto_reconnect") ?: true).validated()
-                        getSharedPreferences("profile", MODE_PRIVATE).edit().putString("server", profile.server).putString("hostname", profile.hostname).putBoolean("accept_routes", profile.acceptRoutes).putBoolean("auto_reconnect", profile.autoReconnect).apply()
-                        result.success(profileJson().toString())
+                        requireIdle()
+                        val profile = Profile(call.argument<String>("server") ?: "", call.argument<String>("hostname") ?: "", call.argument<Boolean>("accept_routes") ?: true, call.argument<Boolean>("auto_reconnect") ?: true,
+                            AppRouting(AppRoutingMode.parse(call.argument<String>("app_routing") ?: "all"), call.argument<List<String>>("applications") ?: emptyList())).validated()
+                        val saved = ProfileStore(this).save(profile)
+                        VpnState.finish()
+                        result.success(ProfileStore.toJson(saved.current).toString())
+                    }
+                    "selectProfile" -> {
+                        requireIdle()
+                        ProfileStore(this).select(call.argument<String>("server") ?: "")
+                        VpnState.finish()
+                        result.success(null)
+                    }
+                    "forgetProfile" -> {
+                        requireIdle()
+                        ProfileStore(this).remove(call.argument<String>("server") ?: "")
+                        result.success(null)
                     }
                     "connect" -> {
-                        check(pending == null && VpnState.phase() in setOf("disconnected", "error")) { "连接正在进行，请稍候" }
+                        requireIdle()
                         val key = call.argument<String>("auth_key") ?: ""
                         require(key.length <= 4096) { "接入密钥过长" }
+                        ApplicationInventory.plan(this, currentProfile().appRouting)
                         pending = result
                         pendingKey = key
                         val prepare = VpnService.prepare(this)
@@ -82,23 +113,17 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun currentProfile(): Profile {
-        val json = profileJson()
-        return Profile(json.getString("server"), json.getString("hostname"), json.getBoolean("accept_routes"), json.getBoolean("auto_reconnect")).validated()
-    }
+    private fun currentProfile(): Profile = ProfileStore(this).read().current
 
-    private fun profileJson(): JSONObject {
-        val preferences = getSharedPreferences("profile", MODE_PRIVATE)
-        val name = ("android-" + Build.MODEL).replace(Regex("[^A-Za-z0-9-]"), "-").take(63)
-        return JSONObject().put("server", preferences.getString("server", "https://fakeop4.onbed.cn:9090/"))
-            .put("hostname", preferences.getString("hostname", name)).put("accept_routes", preferences.getBoolean("accept_routes", true)).put("auto_reconnect", preferences.getBoolean("auto_reconnect", true))
+    private fun requireIdle() {
+        check(pending == null && VpnState.phase() in setOf("disconnected", "error")) { "请先结束授权并断开连接，再修改或切换服务器" }
     }
 
     private fun startConnection() {
         val result = pending ?: return
         try {
             val profile = currentProfile()
-            getSharedPreferences("profile", MODE_PRIVATE).edit().putString("server", profile.server).putString("hostname", profile.hostname).putBoolean("accept_routes", profile.acceptRoutes).apply()
+            ApplicationInventory.plan(this, profile.appRouting)
             VpnState.begin()
             startForegroundService(Intent(this, XunaraVpnService::class.java).putExtra("auth_key", pendingKey))
             result.success(null)

@@ -10,6 +10,7 @@ class AppController extends ChangeNotifier {
   AppController(this.gateway);
   final VpnGateway gateway;
   ClientProfile? profile;
+  List<ClientProfile> profiles = const [];
   VpnSnapshot snapshot = const VpnSnapshot();
   String coreVersion = '';
   String? error;
@@ -23,6 +24,9 @@ class AppController extends ChangeNotifier {
     await perform(() async {
       final initial = await gateway.bootstrap();
       profile = initial.profile;
+      profiles = initial.profiles.isEmpty
+          ? [initial.profile]
+          : initial.profiles;
       snapshot = initial.snapshot;
       coreVersion = initial.coreVersion;
     });
@@ -84,6 +88,11 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> connect({String authKey = ''}) async {
+    if (profile == null) {
+      error = '请先重新加载并确认当前服务器，再连接网络';
+      if (!_disposed) notifyListeners();
+      return;
+    }
     await perform(() => gateway.connect(authKey: authKey));
     await refresh();
   }
@@ -93,9 +102,43 @@ class AppController extends ChangeNotifier {
     await refresh();
   }
 
-  Future<bool> save(ClientProfile next) => perform(() async {
-    profile = await gateway.saveProfile(next);
+  Future<bool> _changeProfiles(Future<void> Function() change) async {
+    if (profile == null) {
+      error = '请先重新加载并确认当前服务器，再修改设置';
+      if (!_disposed) notifyListeners();
+      return false;
+    }
+    if (snapshot.phase.active) {
+      error = '请先断开连接，再修改或切换服务器';
+      if (!_disposed) notifyListeners();
+      return false;
+    }
+    return perform(() async {
+      try {
+        await change();
+        final current = await gateway.bootstrap();
+        profile = current.profile;
+        profiles = current.profiles.isEmpty
+            ? [current.profile]
+            : current.profiles;
+        snapshot = current.snapshot;
+      } on Exception {
+        // 原生提交结果未知时先读回，不拿旧服务器标签启动可能已切换的机器身份。
+        profile = null;
+        profiles = const [];
+        snapshot = const VpnSnapshot(phase: ConnectionPhase.error);
+        rethrow;
+      }
+    });
+  }
+
+  Future<bool> save(ClientProfile next) => _changeProfiles(() async {
+    await gateway.saveProfile(next);
   });
+  Future<bool> selectProfile(String server) =>
+      _changeProfiles(() => gateway.selectProfile(server));
+  Future<bool> forgetProfile(String server) =>
+      _changeProfiles(() => gateway.forgetProfile(server));
 
   @override
   void dispose() {

@@ -14,6 +14,22 @@ void main() {
     final gateway = AndroidVpnGateway();
     final initial = await gateway.bootstrap();
     expect(initial.coreVersion, isNotEmpty);
+    final preferences = await File(
+      '/data/user/0/net.xunara.android/shared_prefs/profile.xml',
+    ).readAsString();
+    expect(preferences.contains('name="catalog_v1"'), isTrue);
+    for (final legacyKey in [
+      'server',
+      'hostname',
+      'accept_routes',
+      'auto_reconnect',
+    ]) {
+      expect(
+        preferences.contains('name="$legacyKey"'),
+        isFalse,
+        reason: '成功迁移后不能残留混读旧偏好',
+      );
+    }
     const cache = '/data/user/0/net.xunara.android/cache';
     for (final name in [
       'connected',
@@ -31,6 +47,12 @@ void main() {
       'mobile-ready',
       'mobile-connected',
       'mobile-finish',
+      'routing-only',
+      'routing-only-verified',
+      'routing-excluded',
+      'routing-excluded-verified',
+      'routing-restored',
+      'routing-restored-verified',
     ]) {
       final marker = File('$cache/integration-$name');
       if (await marker.exists()) await marker.delete();
@@ -150,11 +172,110 @@ void main() {
       await gateway.connect();
       final reconnected = await waitFor(gateway, ConnectionPhase.connected);
       expect(reconnected.addresses, connected.addresses);
+      await expectLater(
+        gateway.selectProfile(initial.profile.server),
+        throwsA(isA<PlatformException>()),
+      );
+      await gateway.disconnect();
+      await waitFor(gateway, ConnectionPhase.disconnected);
+      final testProfile = (await gateway.bootstrap()).profile;
+      const unused = 'https://integration-unused.invalid/';
+      await gateway.saveProfile(
+        testProfile.copyWith(
+          server: unused,
+          hostname: 'office-phone',
+          acceptRoutes: false,
+        ),
+      );
+      expect((await gateway.snapshot()).phase, ConnectionPhase.disconnected);
+      await gateway.selectProfile(testProfile.server);
+      final restored = await gateway.bootstrap();
+      expect(restored.profile.hostname, testProfile.hostname);
+      expect(restored.profile.acceptRoutes, isTrue);
+      expect(
+        restored.profiles.map((profile) => profile.server).toSet().length,
+        restored.profiles.length,
+      );
+      await expectLater(
+        gateway.forgetProfile(testProfile.server),
+        throwsA(isA<PlatformException>()),
+      );
+      await gateway.forgetProfile(unused);
+      expect((await gateway.systemDiagnostics()).vpnPermission, isTrue);
+      expect(await gateway.applications(), isNotEmpty);
+
+      await gateway.saveProfile(
+        testProfile.copyWith(
+          appRouting: AppRoutingMode.only,
+          applications: ['com.android.shell'],
+        ),
+      );
+      await gateway.connect();
+      final only = await waitFor(gateway, ConnectionPhase.connected);
+      expect(only.addresses, connected.addresses);
+      await File('$cache/integration-routing-only').writeAsString('{}');
+      await waitForMarker('routing-only-verified');
+      await gateway.disconnect();
+      await waitFor(gateway, ConnectionPhase.disconnected);
+
+      await gateway.saveProfile(
+        testProfile.copyWith(
+          appRouting: AppRoutingMode.exclude,
+          applications: ['com.android.shell'],
+        ),
+      );
+      await gateway.connect();
+      await waitFor(gateway, ConnectionPhase.connected);
+      await File('$cache/integration-routing-excluded').writeAsString('{}');
+      await waitForMarker('routing-excluded-verified');
+      await gateway.disconnect();
+      await waitFor(gateway, ConnectionPhase.disconnected);
+
+      await gateway.saveProfile(
+        testProfile.copyWith(
+          appRouting: AppRoutingMode.only,
+          applications: ['com.xunara.integration.removed'],
+        ),
+      );
+      await expectLater(
+        gateway.connect(),
+        throwsA(
+          isA<PlatformException>().having(
+            (error) => error.message,
+            '空安装清单拒绝',
+            contains('已卸载'),
+          ),
+        ),
+      );
+      expect((await gateway.snapshot()).phase, ConnectionPhase.disconnected);
+      await expectLater(
+        gateway.saveProfile(
+          testProfile.copyWith(appRouting: AppRoutingMode.only),
+        ),
+        throwsA(isA<PlatformException>()),
+      );
+      await gateway.saveProfile(testProfile);
+      await gateway.connect();
+      final restoredRouting = await waitFor(gateway, ConnectionPhase.connected);
+      expect(restoredRouting.addresses, connected.addresses);
+      await File('$cache/integration-routing-restored').writeAsString('{}');
+      await waitForMarker('routing-restored-verified');
     } finally {
       authKey = '';
       await gateway.disconnect();
       await waitFor(gateway, ConnectionPhase.disconnected);
       await gateway.saveProfile(initial.profile);
+      for (final profile in initial.profiles) {
+        await gateway.saveProfile(profile);
+      }
+      await gateway.selectProfile(initial.profile.server);
+      final previous = initial.profiles.map((profile) => profile.server).toSet()
+        ..add(initial.profile.server);
+      for (final profile in (await gateway.bootstrap()).profiles) {
+        if (!previous.contains(profile.server)) {
+          await gateway.forgetProfile(profile.server);
+        }
+      }
     }
   });
 }

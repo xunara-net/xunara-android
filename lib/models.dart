@@ -19,31 +19,68 @@ enum ConnectionPhase {
   };
 }
 
+enum AppRoutingMode {
+  all('全部应用'),
+  exclude('排除所选应用'),
+  only('仅所选应用');
+
+  const AppRoutingMode(this.label);
+  final String label;
+  static AppRoutingMode parse(String value) => values.firstWhere(
+    (mode) => mode.name == value,
+    orElse: () => throw const FormatException('应用分流方式无效'),
+  );
+}
+
 class ClientProfile {
   const ClientProfile({
     required this.server,
     required this.hostname,
     this.acceptRoutes = true,
     this.autoReconnect = true,
+    this.appRouting = AppRoutingMode.all,
+    this.applications = const [],
   });
   factory ClientProfile.fromJson(Map<String, dynamic> json) => ClientProfile(
     server: json['server'] as String? ?? '',
     hostname: json['hostname'] as String? ?? 'android',
     acceptRoutes: json['accept_routes'] as bool? ?? true,
     autoReconnect: json['auto_reconnect'] as bool? ?? true,
+    appRouting: AppRoutingMode.parse(json['app_routing'] as String? ?? 'all'),
+    applications: (json['applications'] as List? ?? []).cast<String>(),
   );
 
   final String server;
   final String hostname;
   final bool acceptRoutes;
   final bool autoReconnect;
+  final AppRoutingMode appRouting;
+  final List<String> applications;
   String get displayServer => Uri.tryParse(server)?.authority ?? server;
   Map<String, dynamic> toJson() => {
     'server': server,
     'hostname': hostname,
     'accept_routes': acceptRoutes,
     'auto_reconnect': autoReconnect,
+    'app_routing': appRouting.name,
+    'applications': applications,
   };
+
+  ClientProfile copyWith({
+    String? server,
+    String? hostname,
+    bool? acceptRoutes,
+    bool? autoReconnect,
+    AppRoutingMode? appRouting,
+    List<String>? applications,
+  }) => ClientProfile(
+    server: server ?? this.server,
+    hostname: hostname ?? this.hostname,
+    acceptRoutes: acceptRoutes ?? this.acceptRoutes,
+    autoReconnect: autoReconnect ?? this.autoReconnect,
+    appRouting: appRouting ?? this.appRouting,
+    applications: applications ?? this.applications,
+  );
 
   static String? validateServer(String? raw) {
     final uri = Uri.tryParse(raw?.trim() ?? '');

@@ -3,18 +3,30 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 
 import 'models.dart';
+import 'system_diagnostics.dart';
 
 class Bootstrap {
-  const Bootstrap(this.profile, this.snapshot, this.coreVersion);
+  const Bootstrap(
+    this.profile,
+    this.snapshot,
+    this.coreVersion, {
+    this.profiles = const [],
+  });
   final ClientProfile profile;
   final VpnSnapshot snapshot;
   final String coreVersion;
+  final List<ClientProfile> profiles;
 }
 
 abstract class VpnGateway {
   Future<Bootstrap> bootstrap();
   Future<VpnSnapshot> snapshot();
   Future<ClientProfile> saveProfile(ClientProfile profile);
+  Future<void> selectProfile(String server);
+  Future<void> forgetProfile(String server);
+  Future<List<InstalledApplication>> applications();
+  Future<SystemDiagnostics> systemDiagnostics();
+  Future<void> batterySettings();
   Future<void> connect({String authKey = ''});
   Future<void> disconnect();
   Future<void> openAuthorization();
@@ -39,6 +51,12 @@ class AndroidVpnGateway implements VpnGateway {
       ClientProfile.fromJson(json['profile'] as Map<String, dynamic>),
       VpnSnapshot.fromJson(json['snapshot'] as Map<String, dynamic>),
       json['core_version'] as String,
+      profiles: (json['profiles'] as List)
+          .map(
+            (entry) =>
+                ClientProfile.fromJson(Map<String, dynamic>.from(entry as Map)),
+          )
+          .toList(),
     );
   }
 
@@ -48,6 +66,30 @@ class AndroidVpnGateway implements VpnGateway {
   @override
   Future<ClientProfile> saveProfile(ClientProfile profile) async =>
       ClientProfile.fromJson(await _json('saveProfile', profile.toJson()));
+  @override
+  Future<void> selectProfile(String server) =>
+      _channel.invokeMethod<void>('selectProfile', {'server': server});
+  @override
+  Future<void> forgetProfile(String server) =>
+      _channel.invokeMethod<void>('forgetProfile', {'server': server});
+  @override
+  Future<List<InstalledApplication>> applications() async {
+    final json = await _json('applications');
+    return (json['applications'] as List)
+        .map(
+          (entry) => InstalledApplication.fromJson(
+            Map<String, dynamic>.from(entry as Map),
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<SystemDiagnostics> systemDiagnostics() async =>
+      SystemDiagnostics.fromJson(await _json('systemDiagnostics'));
+  @override
+  Future<void> batterySettings() =>
+      _channel.invokeMethod<void>('batterySettings');
   @override
   Future<void> connect({String authKey = ''}) =>
       _channel.invokeMethod<void>('connect', {'auth_key': authKey});
