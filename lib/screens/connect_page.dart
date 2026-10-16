@@ -67,7 +67,7 @@ class ConnectPage extends StatelessWidget {
                 if (!snapshot.authorizationAvailable)
                   Semantics(
                     button: true,
-                    label: connected ? '断开私有网络' : '连接私有网络',
+                    label: phase.active ? '断开私有网络' : '连接私有网络',
                     child: SizedBox(
                       width: 144,
                       height: 144,
@@ -90,6 +90,7 @@ class ConnectPage extends StatelessWidget {
                           children: [
                             if (controller.busy ||
                                 phase == ConnectionPhase.connecting ||
+                                phase == ConnectionPhase.reconnecting ||
                                 phase == ConnectionPhase.stopping)
                               const SizedBox(
                                 width: 32,
@@ -209,6 +210,17 @@ class ConnectPage extends StatelessWidget {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
+                  if (snapshot.networkLabel.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        '当前连接 · ${snapshot.networkLabel}${snapshot.reconnects > 0 ? ' · 已自动重连 ${snapshot.reconnects} 次' : ''}',
+                        style: const TextStyle(
+                          color: Colors.blueGrey,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
                   for (final address in snapshot.addresses)
                     InkWell(
                       onTap: () => _copy(context, addressOnly(address)),
@@ -231,6 +243,14 @@ class ConnectPage extends StatelessWidget {
                       ),
                     ),
                   const Divider(height: 24),
+                  Text(
+                    '本机密钥到期 · ${expiryLabel(snapshot.keyExpiry)}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.blueGrey,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Wrap(
                     spacing: 20,
                     runSpacing: 12,

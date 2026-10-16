@@ -45,7 +45,8 @@ jobs:
           git diff --exit-code -- assets/native_licenses.json
       - name: APK and Android checks
         run: |
-          flutter build apk --release --target lib/main.dart --target-platform android-arm64,android-x64 --split-per-abi
+          version=$(sed -n 's/^version: //p' pubspec.yaml)
+          flutter build apk --release --target lib/main.dart --target-platform android-arm64,android-x64 --split-per-abi --build-name "${version%+*}" --build-number "${version#*+}"
           cd android
           ./gradlew :app:testDebugUnitTest :app:lintRelease
       - name: Package verifiable preview artifacts
@@ -53,14 +54,23 @@ jobs:
           mkdir -p build/preview
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/preview/xunara-android-preview-arm64-v8a.apk
           cp build/app/outputs/flutter-apk/app-x86_64-release.apk build/preview/xunara-android-preview-x86_64.apk
+          version=$(sed -n 's/^version: //p' pubspec.yaml)
           for package in build/preview/*.apk; do
+            case "$package" in
+              *arm64-v8a.apk) apkCode=$((2000 + ${version#*+}));;
+              *x86_64.apk) apkCode=$((4000 + ${version#*+}));;
+              *) exit 1;;
+            esac
             "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$package" >/dev/null
             "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$package"
+            manifest=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$package")
+            printf '%s\n' "$manifest" | grep -F "versionCode='$apkCode'" >/dev/null
+            printf '%s\n' "$manifest" | grep -F "versionName='${version%+*}'" >/dev/null
           done
           core=$(sed -n 's@^source = "git+https://github.com/xunara-net/xunara-client.*#\([0-9a-f]*\)"@\1@p' native/Cargo.lock)
           test -n "$core"
-          jq -n --arg source "$GITHUB_SHA" --arg core "$core" \
-            '{source:$source,core_source:$core,flutter:"3.47.7",rust:"1.98.1",ndk:"29.0.14206865",signing:"test-only",minimum_android_api:26,abis:["arm64-v8a","x86_64"],physical_device_verified:false}' > build/preview/BUILD.json
+          jq -n --arg source "$GITHUB_SHA" --arg core "$core" --arg version "${version%+*}" --argjson versionCode "${version#*+}" \
+            '{source:$source,core_source:$core,version:$version,version_code_base:$versionCode,apk_version_codes:{"arm64-v8a":(2000+$versionCode),x86_64:(4000+$versionCode)},flutter:"3.47.7",rust:"1.98.1",ndk:"29.0.14206865",signing:"test-only",minimum_android_api:26,abis:["arm64-v8a","x86_64"],physical_device_verified:false}' > build/preview/BUILD.json
           (cd build/preview && sha256sum ./*.apk BUILD.json > SHA256SUMS && sha256sum --check SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:

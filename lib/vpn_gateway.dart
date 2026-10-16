@@ -21,6 +21,7 @@ abstract class VpnGateway {
   Future<void> openConsole();
   Future<void> vpnSettings();
   Future<void> notificationSettings();
+  Future<PingResult> ping(String peerId, {required int generation});
 }
 
 class AndroidVpnGateway implements VpnGateway {
@@ -62,4 +63,15 @@ class AndroidVpnGateway implements VpnGateway {
   @override
   Future<void> notificationSettings() =>
       _channel.invokeMethod<void>('notificationSettings');
+  @override
+  Future<PingResult> ping(String peerId, {required int generation}) async {
+    final json = await _json('ping', {
+      'peer_id': peerId,
+      'generation': generation,
+    });
+    if (json['error'] case final String message) {
+      throw PlatformException(code: 'PING_FAILED', message: message);
+    }
+    return PingResult.fromJson(json['result'] as Map<String, dynamic>);
+  }
 }

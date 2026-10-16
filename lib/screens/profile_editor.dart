@@ -19,6 +19,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
     text: widget.controller.profile!.hostname,
   );
   late bool _routes = widget.controller.profile!.acceptRoutes;
+  late bool _reconnect = widget.controller.profile!.autoReconnect;
   bool _saving = false;
   String? _error;
 
@@ -78,6 +79,16 @@ class _ProfileEditorState extends State<ProfileEditor> {
               ),
             ),
             const SizedBox(height: 16),
+            Card(
+              child: SwitchListTile(
+                key: const Key('auto-reconnect-switch'),
+                title: const Text('网络恢复后自动重连'),
+                subtitle: const Text('切换 Wi-Fi / 移动网络后重新检查局域网；主动断开不会自行连接'),
+                value: _reconnect,
+                onChanged: (value) => setState(() => _reconnect = value),
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
               '本版本不接管默认出口，不更改手机 DNS。Android 作为子网访问端使用，不在手机上开启需要 root 的转发。',
               style: TextStyle(
@@ -113,6 +124,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
         server: _server.text.trim(),
         hostname: _hostname.text.trim(),
         acceptRoutes: _routes,
+        autoReconnect: _reconnect,
       ),
     );
     if (!mounted) return;

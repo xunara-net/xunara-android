@@ -1,6 +1,7 @@
 use std::{
     os::fd::{FromRawFd, OwnedFd},
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use anyhow::{Context, Result, ensure};
@@ -15,6 +16,7 @@ use tokio::sync::{mpsc, watch};
 use xunara_client::{
     config::Config,
     control,
+    diagnostic::PingRequest,
     engine::Engine,
     mobile::{self, Host, VpnConfiguration},
     state::Store,
@@ -169,6 +171,16 @@ fn run(
         let identity = Arc::new(store.identity(&config.server)?);
         let (endpoints, receiver) = watch::channel(Vec::new());
         let mut engine = Engine::new(config.clone(), identity.clone(), endpoints).await?;
+        let (commands, requests) = mpsc::channel(4);
+        engine.enable_diagnostics(requests);
+        // 只绑定当前内核实例；stop 或 generation 切换后拒绝再投递诊断。
+        if *stopped.borrow() {
+            return Ok(());
+        }
+        LIFECYCLE
+            .lock()
+            .map_err(|_| anyhow::anyhow!("客户端状态锁损坏"))?
+            .attach(generation, commands)?;
         let (maps, updates) = mpsc::channel(4);
         let control = tokio::spawn(control::run(config, identity, auth_key, receiver, maps));
         let result = tokio::select! {
@@ -241,6 +253,42 @@ pub extern "system" fn Java_net_xunara_android_NativeBridge_version(
     _class: JClass<'_>,
 ) -> jstring {
     env.new_string(xunara_client::VERSION)
+        .map(|value| value.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_net_xunara_android_NativeBridge_ping(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    peer: JString<'_>,
+    generation: jlong,
+) -> jstring {
+    let result = (|| -> Result<_> {
+        let peer: String = env.get_string(&peer)?.into();
+        ensure!(peer.len() <= 20 && !peer.is_empty(), "设备标识无效");
+        let peer = peer.parse::<u64>().context("设备标识无效")?;
+        let commands = LIFECYCLE
+            .lock()
+            .map_err(|_| anyhow::anyhow!("客户端状态锁损坏"))?
+            .commands(generation as u64)?;
+        let (reply, receiver) = std::sync::mpsc::sync_channel(1);
+        commands
+            .try_send(PingRequest { peer, reply })
+            .map_err(|_| anyhow::anyhow!("已有检测进行中或连接已退出"))?;
+        // 仅在 Kotlin 专用工作线程等待；主线程和 Rust 转发事件循环都不会阻塞。
+        receiver
+            .recv_timeout(Duration::from_secs(12))
+            .context("检测未完成，请检查连接后重试")?
+    })();
+    let value = match result {
+        Ok(result) => serde_json::json!({"result": result}),
+        Err(error) => serde_json::json!({"error": error.to_string()}),
+    };
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+    }
+    env.new_string(value.to_string())
         .map(|value| value.into_raw())
         .unwrap_or(std::ptr::null_mut())
 }

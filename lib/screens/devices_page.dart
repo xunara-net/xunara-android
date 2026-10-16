@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../app_controller.dart';
 import '../models.dart';
+import 'device_detail_sheet.dart';
 
 class DevicesPage extends StatefulWidget {
   const DevicesPage({required this.controller, super.key});
@@ -107,7 +107,17 @@ class _DevicesPageState extends State<DevicesPage> {
                     ),
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => _detail(context, device),
+                  onTap: () => showModalBottomSheet<void>(
+                    context: context,
+                    useSafeArea: true,
+                    isScrollControlled: true,
+                    showDragHandle: true,
+                    builder: (_) => DeviceDetailSheet(
+                      controller: widget.controller,
+                      peerId: device.id,
+                      generation: widget.controller.snapshot.generation,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -120,62 +130,4 @@ class _DevicesPageState extends State<DevicesPage> {
       ),
     );
   }
-
-  void _detail(BuildContext context, NetworkDevice device) =>
-      showModalBottomSheet<void>(
-        context: context,
-        useSafeArea: true,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (context) => SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                device.displayName,
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              for (final address in device.addresses)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(addressOnly(address)),
-                  subtitle: const Text('点击复制网络地址'),
-                  trailing: const Icon(Icons.copy_rounded),
-                  onTap: () async {
-                    await Clipboard.setData(
-                      ClipboardData(text: addressOnly(address)),
-                    );
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(const SnackBar(content: Text('已复制地址')));
-                    }
-                  },
-                ),
-              const Divider(),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('连接方式'),
-                trailing: Text(device.pathLabel),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('中继区域'),
-                trailing: Text(
-                  device.relayRegion > 0 ? '#${device.relayRegion}' : '未配置',
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '改名、审批、过期时间与分享请前往用户中心管理，手机端不申请全局管理权限。',
-                style: TextStyle(color: Colors.blueGrey, height: 1.6),
-              ),
-            ],
-          ),
-        ),
-      );
 }

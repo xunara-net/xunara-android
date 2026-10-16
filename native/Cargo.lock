@@ -1712,7 +1712,7 @@ dependencies = [
 [[package]]
 name = "xunara-client"
 version = "0.1.0"
-source = "git+https://github.com/xunara-net/xunara-client?rev=454987dc15a9b08a3f4f0822591267673d0f25a3#454987dc15a9b08a3f4f0822591267673d0f25a3"
+source = "git+https://github.com/xunara-net/xunara-client?rev=4e572228de19f1063017b8aa94cdd53c462026c5#4e572228de19f1063017b8aa94cdd53c462026c5"
 dependencies = [
  "anyhow",
  "boringtun",

@@ -24,7 +24,7 @@ android {
     buildTypes {
         release {
             proguardFiles("proguard-rules.pro")
-            // 首版仅发布明确标注的测试包，正式分发必须接入私有签名密钥。
+            // 预览版使用明确标注的测试签名，正式分发必须接入私有签名密钥。
             signingConfig = signingConfigs.getByName("debug")
         }
     }

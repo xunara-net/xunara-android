@@ -24,21 +24,25 @@ class ClientProfile {
     required this.server,
     required this.hostname,
     this.acceptRoutes = true,
+    this.autoReconnect = true,
   });
   factory ClientProfile.fromJson(Map<String, dynamic> json) => ClientProfile(
     server: json['server'] as String? ?? '',
     hostname: json['hostname'] as String? ?? 'android',
     acceptRoutes: json['accept_routes'] as bool? ?? true,
+    autoReconnect: json['auto_reconnect'] as bool? ?? true,
   );
 
   final String server;
   final String hostname;
   final bool acceptRoutes;
+  final bool autoReconnect;
   String get displayServer => Uri.tryParse(server)?.authority ?? server;
   Map<String, dynamic> toJson() => {
     'server': server,
     'hostname': hostname,
     'accept_routes': acceptRoutes,
+    'auto_reconnect': autoReconnect,
   };
 
   static String? validateServer(String? raw) {
@@ -73,6 +77,10 @@ class NetworkDevice {
     required this.addresses,
     required this.path,
     required this.relayRegion,
+    this.relayName = '',
+    this.os = '',
+    this.keyExpiry,
+    this.routes = const [],
   });
   factory NetworkDevice.fromJson(Map<String, dynamic> json) => NetworkDevice(
     id: json['id'] as String? ?? '',
@@ -80,14 +88,50 @@ class NetworkDevice {
     addresses: (json['addresses'] as List? ?? []).cast<String>(),
     path: json['path'] as String? ?? '',
     relayRegion: (json['relay_region'] as num?)?.toInt() ?? 0,
+    relayName: json['relay_name'] as String? ?? '',
+    os: json['os'] as String? ?? '',
+    keyExpiry: json['key_expiry'] as String?,
+    routes: (json['routes'] as List? ?? []).cast<String>(),
   );
   final String id;
   final String name;
   final List<String> addresses;
   final String path;
   final int relayRegion;
+  final String relayName;
+  final String os;
+  final String? keyExpiry;
+  final List<String> routes;
   String get displayName => name.replaceFirst(RegExp(r'\.$'), '');
   String get pathLabel => path == 'direct' ? '直连已探测' : '中继候选';
+}
+
+class PingResult {
+  const PingResult({
+    required this.address,
+    required this.rttMs,
+    required this.path,
+    this.relayRegion = 0,
+  });
+  factory PingResult.fromJson(Map<String, dynamic> json) {
+    final milliseconds = (json['rtt_ms'] as num).toDouble();
+    if (!milliseconds.isFinite ||
+        milliseconds < 0 ||
+        !{'direct', 'relay'}.contains(json['path'])) {
+      throw const FormatException('检测结果无效');
+    }
+    return PingResult(
+      address: json['address'] as String,
+      rttMs: milliseconds,
+      path: json['path'] as String,
+      relayRegion: (json['relay_region'] as num?)?.toInt() ?? 0,
+    );
+  }
+  final String address;
+  final double rttMs;
+  final String path;
+  final int relayRegion;
+  String get pathLabel => path == 'direct' ? 'UDP 直连' : 'DERP 中继';
 }
 
 class VpnSnapshot {
@@ -101,9 +145,17 @@ class VpnSnapshot {
     this.bytesSent = 0,
     this.directPeers = 0,
     this.skippedRoutes = const [],
+    this.generation = 0,
+    this.networkLabel = '',
+    this.reconnects = 0,
+    this.selfName = '',
+    this.keyExpiry,
+    this.magicDnsEnabled = false,
+    this.searchDomains = const [],
   });
   factory VpnSnapshot.fromJson(Map<String, dynamic> json) {
     final status = json['status'] as Map<String, dynamic>? ?? {};
+    final dns = status['dns'] as Map<String, dynamic>? ?? {};
     return VpnSnapshot(
       phase: ConnectionPhase.values.firstWhere(
         (phase) => phase.name == json['phase'],
@@ -125,6 +177,13 @@ class VpnSnapshot {
       bytesSent: (status['bytes_sent'] as num?)?.toInt() ?? 0,
       directPeers: (status['direct_peers'] as num?)?.toInt() ?? 0,
       skippedRoutes: (json['skipped_routes'] as List? ?? []).cast<String>(),
+      generation: (json['generation'] as num?)?.toInt() ?? 0,
+      networkLabel: json['network_label'] as String? ?? '',
+      reconnects: (json['reconnects'] as num?)?.toInt() ?? 0,
+      selfName: status['self_name'] as String? ?? '',
+      keyExpiry: status['key_expiry'] as String?,
+      magicDnsEnabled: dns['enabled'] as bool? ?? false,
+      searchDomains: (dns['domains'] as List? ?? []).cast<String>(),
     );
   }
   final ConnectionPhase phase;
@@ -136,7 +195,34 @@ class VpnSnapshot {
   final int bytesSent;
   final int directPeers;
   final List<String> skippedRoutes;
+  final int generation;
+  final String networkLabel;
+  final int reconnects;
+  final String selfName;
+  final String? keyExpiry;
+  final bool magicDnsEnabled;
+  final List<String> searchDomains;
 }
+
+String expiryLabel(String? raw) {
+  final expiry = raw == null ? null : DateTime.tryParse(raw);
+  if (expiry == null) return '服务器未提供';
+  if (expiry.year <= 1) return '不自动过期';
+  final local = expiry.toLocal();
+  String pad(int value) => value.toString().padLeft(2, '0');
+  return '${local.year}-${pad(local.month)}-${pad(local.day)} ${pad(local.hour)}:${pad(local.minute)}';
+}
+
+String osLabel(String os) =>
+    const {
+      'android': 'Android',
+      'linux': 'Linux',
+      'windows': 'Windows',
+      'macOS': 'macOS',
+      'darwin': 'macOS',
+      'ios': 'iOS',
+    }[os] ??
+    (os.isEmpty ? '未知系统' : os);
 
 String addressOnly(String cidr) => cidr.split('/').first;
 String formatBytes(int bytes) {

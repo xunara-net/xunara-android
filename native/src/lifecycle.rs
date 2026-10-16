@@ -1,10 +1,12 @@
 use anyhow::{Context, Result, ensure};
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
+use xunara_client::diagnostic::PingRequest;
 
 struct Running {
     generation: u64,
     started: bool,
     stop: watch::Sender<bool>,
+    commands: Option<mpsc::Sender<PingRequest>>,
 }
 
 pub struct Lifecycle {
@@ -32,6 +34,7 @@ impl Lifecycle {
             generation: self.next,
             started: false,
             stop,
+            commands: None,
         });
         Ok(self.next)
     }
@@ -56,6 +59,28 @@ impl Lifecycle {
             // 即使工作线程还没订阅，也必须保留用户先前点击的断开意图。
             running.stop.send_replace(true);
         }
+    }
+
+    pub fn attach(&mut self, generation: u64, commands: mpsc::Sender<PingRequest>) -> Result<()> {
+        let running = self
+            .running
+            .as_mut()
+            .filter(|running| {
+                running.generation == generation && running.started && !*running.stop.borrow()
+            })
+            .context("连接已失效")?;
+        running.commands = Some(commands);
+        Ok(())
+    }
+
+    pub fn commands(&self, generation: u64) -> Result<mpsc::Sender<PingRequest>> {
+        self.running
+            .as_ref()
+            .filter(|running| {
+                running.generation == generation && running.started && !*running.stop.borrow()
+            })
+            .and_then(|running| running.commands.clone())
+            .context("请先连接网络")
     }
 
     pub fn finish(&mut self, generation: u64) {
@@ -99,5 +124,28 @@ mod tests {
         assert!(*receiver.borrow());
         lifecycle.finish(current);
         assert!(lifecycle.prepare().is_ok());
+    }
+
+    #[test]
+    fn diagnostic_commands_cannot_cross_stopped_generations() {
+        let mut lifecycle = Lifecycle::new();
+        let previous = lifecycle.prepare().unwrap();
+        assert!(lifecycle.commands(previous).is_err());
+        lifecycle.start(previous).unwrap();
+        let (sender, _receiver) = mpsc::channel(4);
+        lifecycle.attach(previous, sender).unwrap();
+        assert!(lifecycle.commands(previous).is_ok());
+        lifecycle.stop(previous);
+        assert!(lifecycle.commands(previous).is_err());
+        lifecycle.finish(previous);
+        let current = lifecycle.prepare().unwrap();
+        lifecycle.start(current).unwrap();
+        let (sender, _receiver) = mpsc::channel(4);
+        assert!(lifecycle.attach(previous, sender).is_err());
+        assert!(lifecycle.commands(current).is_err());
+        let (sender, _receiver) = mpsc::channel(4);
+        lifecycle.attach(current, sender).unwrap();
+        assert!(lifecycle.commands(previous).is_err());
+        assert!(lifecycle.commands(current).is_ok());
     }
 }

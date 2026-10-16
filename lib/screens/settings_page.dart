@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
 import 'profile_editor.dart';
+import 'dns_info_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({required this.controller, super.key});
@@ -70,6 +71,18 @@ class SettingsPage extends StatelessWidget {
             ),
             const Divider(height: 1, indent: 56),
             ListTile(
+              leading: const Icon(Icons.language_rounded),
+              title: const Text('设备域名与 DNS'),
+              subtitle: const Text('查看 MagicDNS 配置，保留手机原有解析器'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DnsInfoPage(controller: controller),
+                ),
+              ),
+            ),
+            const Divider(height: 1, indent: 56),
+            ListTile(
               leading: const Icon(Icons.manage_accounts_outlined),
               title: const Text('打开用户中心'),
               subtitle: const Text('管理账号、设备、邀请与访问权限'),
@@ -124,7 +137,7 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Android 预览版 0.1.0 · Rust ${controller.coreVersion}',
+                'Android 预览版 0.1.1 · Rust ${controller.coreVersion}',
                 style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
               ),
             ],
@@ -135,7 +148,7 @@ class SettingsPage extends StatelessWidget {
         onPressed: () => showLicensePage(
           context: context,
           applicationName: '玄序 Xunara',
-          applicationVersion: '0.1.0 预览版',
+          applicationVersion: '0.1.1 预览版',
         ),
         icon: const Icon(Icons.description_outlined, size: 18),
         label: const Text('开源组件声明'),
@@ -150,7 +163,7 @@ class SettingsPage extends StatelessWidget {
         ),
       const SizedBox(height: 24),
       const Text(
-        '支持 Android 8.0 及以上 · ARM64 / x86_64\n首版暂不支持 MagicDNS、出口节点或手机充当子网路由器。\nWi-Fi / 移动网络切换后需手动重新连接。',
+        '支持 Android 8.0 及以上 · ARM64 / x86_64\n暂不支持系统级 MagicDNS、出口节点或手机充当子网路由器。\n网络切换后默认安全重连；主动断开不会自动连接。',
         textAlign: TextAlign.center,
         style: TextStyle(fontSize: 12, color: Colors.blueGrey, height: 1.8),
       ),

@@ -6,10 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
 import android.os.Handler
@@ -19,7 +15,6 @@ import android.system.OsConstants
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.net.Inet4Address
 import java.security.MessageDigest
 
 class XunaraVpnService : VpnService() {
@@ -27,37 +22,47 @@ class XunaraVpnService : VpnService() {
     private val lifecycleLock = Any()
     @Volatile private var closing = false
     @Volatile private var worker: Thread? = null
-    private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    private var configured = false
+    private var monitor: UnderlayMonitor? = null
+    private var policy: ReconnectPolicy? = null
     private var lastNotification = ""
-    private var originalNetworks = ""
+    private var plannedFingerprint = ""
     private var generation = 0L
+    private var activeStartId = 0
+    private var configuration = ""
+    private var stopMessage: String? = null
+    private var destroyed = false
+    private var reconnects = 0
+    private var initialKey = ""
+    private val initialTimeout = Runnable { if (generation == 0L && worker == null) disconnect("尚无可用网络，请联网后重试") }
+    private val restart = Runnable {
+        val snapshot = monitor?.snapshot ?: return@Runnable
+        if (policy?.ready(snapshot.available, worker != null) == true) {
+            try { reconnects++; startWorker("") }
+            catch (_: Exception) { disconnect("自动重连失败，请手动重试") }
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = try {
         startConnection(intent, startId)
     } catch (_: Exception) {
-        synchronized(lifecycleLock) { closing = true; stopMessage = "组网服务启动失败，请检查存储空间与系统权限后重试" }
-        NativeBridge.stop(generation)
-        if (worker == null) {
-            VpnState.finish(stopMessage)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf(startId)
-        } else VpnState.stopping()
+        disconnect("组网服务启动失败，请检查存储空间与系统权限后重试")
         START_NOT_STICKY
     }
 
     private fun startConnection(intent: Intent?, startId: Int): Int {
+        activeStartId = startId
         if (intent?.action == ACTION_STOP) { disconnect(); return START_NOT_STICKY }
-        if (worker != null) return START_NOT_STICKY
-        closing = false
-        configured = false
+        var authKey = intent?.getStringExtra("auth_key") ?: ""
+        intent?.removeExtra("auth_key")
+        if (worker != null || policy?.wanted == true) { authKey = ""; return START_NOT_STICKY }
         stopMessage = null
+        reconnects = 0
+        generation = 0
         val preferences = getSharedPreferences("profile", MODE_PRIVATE)
-        val profile = runCatching { Profile(preferences.getString("server", "") ?: "", preferences.getString("hostname", "android") ?: "android", preferences.getBoolean("accept_routes", true)).validated() }.getOrElse {
+        val profile = runCatching { Profile(preferences.getString("server", "") ?: "", preferences.getString("hostname", "android") ?: "android", preferences.getBoolean("accept_routes", true), preferences.getBoolean("auto_reconnect", true)).validated() }.getOrElse {
             VpnState.finish("请先填写服务器地址"); stopSelf(); return START_NOT_STICKY
         }
         if (prepare(this) != null) { VpnState.finish("尚未取得系统 VPN 授权"); stopSelf(); return START_NOT_STICKY }
-        VpnState.begin()
         val notification = notification("正在连接玄序网络")
         if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
         else startForeground(NOTIFICATION, notification)
@@ -66,38 +71,57 @@ class XunaraVpnService : VpnService() {
         val directory = File(noBackupFilesDir, "core/$hash")
         directory.mkdirs()
         Os.chmod(directory.absolutePath, 448)
-        val configuration = JSONObject().put("server", profile.server).put("hostname", profile.hostname)
+        configuration = JSONObject().put("server", profile.server).put("hostname", profile.hostname)
             .put("accept_routes", profile.acceptRoutes).put("state_dir", directory.absolutePath)
             .put("interface", "xunara0").put("listen", "0.0.0.0:0").toString()
-        var authKey = intent?.getStringExtra("auth_key") ?: ""
-        intent?.removeExtra("auth_key")
-        generation = NativeBridge.prepare()
-        check(generation > 0) { "上一连接正在退出，请重试" }
-        originalNetworks = localNetworks()
+        policy = ReconnectPolicy(profile.autoReconnect)
+        // 只等本次用户操作的首次网络就绪，不把密钥写入偏好设置或用于自动重连。
+        initialKey = authKey
+        VpnState.begin()
+        monitor = UnderlayMonitor(this, main, ::networkChanged)
+        monitor?.start()
+        publishNetwork()
+        main.postDelayed(initialTimeout, 30_000)
+        authKey = ""
+        return START_NOT_STICKY
+    }
+
+    private fun startWorker(key: String) {
+        check(worker == null && !destroyed && prepare(this) == null) { "VPN 权限已撤销或上一连接未退出" }
+        val attempt = NativeBridge.prepare()
+        check(attempt > 0) { "上一连接正在退出，请重试" }
+        generation = attempt
+        synchronized(lifecycleLock) { closing = false; plannedFingerprint = "" }
+        policy?.started(monitor?.snapshot?.fingerprint ?: "")
+        VpnState.begin(attempt, reconnects > 0)
+        publishNetwork()
+        var authKey = key
         worker = Thread({
-            val error = try { NativeBridge.run(configuration, authKey, this, generation) } catch (_: Exception) { "组网内核启动失败，请重试" }
+            val error = try { NativeBridge.run(configuration, authKey, this, attempt) } catch (_: Exception) { "组网内核启动失败，请重试" }
             finally { authKey = "" }
             main.post {
+                if (generation != attempt) return@post
                 worker = null
-                stopMessage = if (closing) stopMessage else error
-                synchronized(lifecycleLock) { closing = true; configured = false }
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                networkCallback?.let { runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) } }
-                networkCallback = null
+                if (VpnState.generation() != attempt) return@post
+                val wasClosing = closing
+                synchronized(lifecycleLock) { closing = true }
+                if (!destroyed && policy?.wanted == true && policy?.pending == true) {
+                    scheduleRestart()
+                    return@post
+                }
                 // 系统可能仍绑定 VpnService，不能等 onDestroy 才结束“正在断开”。
-                // 此时 Rust 已关闭 TUN 并退出；同一 service 再次启动也可安全创建新实例。
-                VpnState.finish(stopMessage)
-                stopSelf(startId)
+                finish(if (wasClosing) stopMessage else error, attempt)
             }
         }, "xunara-vpn-core").also { it.start() }
-        observeNetworks()
-        return START_NOT_STICKY
     }
 
     fun protectSocket(descriptor: Int): Boolean = !closing && protect(descriptor)
 
     fun configureTunnel(raw: String): Int = synchronized(lifecycleLock) {
         check(!closing) { "VPN 正在停止" }
+        val snapshot = checkNotNull(monitor).snapshot
+        check(snapshot.available) { "物理网络不可用，请等待网络恢复" }
+        check(plannedFingerprint == snapshot.fingerprint) { "局域网已变化，请重新规划连接" }
         val configuration = JSONObject(raw)
         val builder = Builder().setSession("玄序 · 私有组网").setMtu(configuration.getInt("mtu")).setBlocking(false)
             .setConfigureIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
@@ -112,36 +136,32 @@ class XunaraVpnService : VpnService() {
         val routes = configuration.getJSONArray("routes")
         for (index in 0 until routes.length()) {
             val (address, prefix) = splitPrefix(routes.getString(index))
-            require(prefix > 0) { "首版不接管默认路由" }
+            require(prefix > 0) { "不接管默认路由" }
             builder.addRoute(address, prefix)
         }
         if (Build.VERSION.SDK_INT >= 29) builder.setMetered(false)
         val tunnel = checkNotNull(builder.establish()) { "VPN 权限已撤销" }
-        configured = true
+        val attempt = generation
+        main.post {
+            if (!closing && generation == attempt) {
+                policy?.established(snapshot.fingerprint)
+                networkChanged()
+            }
+        }
         VpnState.update(JSONObject().put("type", "configuration").put("skipped_routes", configuration.optJSONArray("skipped_routes")))
         // detachFd 后只由 Rust OwnedFd 负责关闭，避免复用 fd 被 Java 二次关闭。
         tunnel.detachFd()
     }
 
-    private fun underlays(): List<android.net.LinkProperties> {
-        val manager = getSystemService(ConnectivityManager::class.java)
-        return manager.allNetworks.filter { manager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == false }
-            .mapNotNull { manager.getLinkProperties(it) }
+    fun localNetworks(): String = synchronized(lifecycleLock) {
+        val snapshot = checkNotNull(monitor).snapshot
+        plannedFingerprint = snapshot.fingerprint
+        JSONArray(snapshot.localNetworks).toString()
     }
 
-    fun localNetworks(): String = JSONArray(underlays().flatMap { properties ->
-        properties.routes.filter { !it.isDefaultRoute && it.gateway == null }.map { it.destination.toString() } +
-            properties.linkAddresses.map { NetworkAddress.prefix(it.address, it.prefixLength) } +
-            // 系统解析器可能位于非直连网段，不能让已导入的子网截走手机 DNS。
-            properties.dnsServers.map { NetworkAddress.prefix(it, if (it is Inet4Address) 32 else 128) }
-    }.distinct().sorted()).toString()
+    fun localEndpoints(port: Int): String = JSONArray(monitor?.snapshot?.ipv4Addresses?.map { "$it:$port" } ?: emptyList<String>()).toString()
 
-    fun localEndpoints(port: Int): String = JSONArray(underlays().flatMap { it.linkAddresses }.mapNotNull {
-        val address = it.address
-        if (address is Inet4Address && !address.isLoopbackAddress && !address.isLinkLocalAddress && !address.isAnyLocalAddress) "${address.hostAddress}:$port" else null
-    }.distinct().take(32)).toString()
-
-    fun onCoreEvent(raw: String) {
+    fun onCoreEvent(raw: String): Unit = synchronized(lifecycleLock) {
         if (closing) return
         val event = JSONObject(raw)
         VpnState.update(event)
@@ -159,36 +179,73 @@ class XunaraVpnService : VpnService() {
         }
     }
 
-    private fun observeNetworks() {
-        val manager = getSystemService(ConnectivityManager::class.java)
-        networkCallback = object : ConnectivityManager.NetworkCallback() {
-            override fun onLinkPropertiesChanged(network: Network, properties: android.net.LinkProperties) {
-                // LAN 改变后旧 VPN 路由可能截走新内网；安全断开，用户明确重连重新计算。
-                if (configured && localNetworks() != originalNetworks) {
-                    main.post { if (!closing) { disconnect("网络环境已变化，请重新连接以避免局域网冲突") } }
-                }
-            }
-            override fun onLost(network: Network) {
-                main.post { if (configured && !closing && localNetworks() != originalNetworks) disconnect("网络已切换，请重新连接") }
-            }
+    private fun networkChanged() {
+        publishNetwork()
+        if (generation == 0L && worker == null && policy?.wanted == true && monitor?.snapshot?.available == true) {
+            main.removeCallbacks(initialTimeout)
+            val key = initialKey
+            initialKey = ""
+            try { startWorker(key) } catch (_: Exception) { disconnect("连接启动失败，请重试") }
+            return
         }
-        manager.registerNetworkCallback(NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build(), networkCallback!!)
+        when (policy?.changed(monitor?.snapshot?.fingerprint ?: "")) {
+            ReconnectPolicy.Action.RESTART -> {
+                // 先退出旧 TUN，再按新 LAN 重新建路由；绝不靠“继续显示在线”掩盖断网。
+                synchronized(lifecycleLock) { closing = true }
+                NativeBridge.stop(generation)
+                scheduleRestart()
+            }
+            ReconnectPolicy.Action.STOP -> disconnect("网络已变化；自动重连已关闭，请手动连接")
+            else -> Unit
+        }
     }
 
-    private var stopMessage: String? = null
+    private fun publishNetwork() {
+        VpnState.network(monitor?.snapshot?.label ?: "等待网络恢复", reconnects)
+    }
+
+    private fun scheduleRestart() {
+        main.removeCallbacks(restart)
+        val available = monitor?.snapshot?.available == true
+        VpnState.reconnecting(if (available) "网络已切换，正在重新检查局域网并连接" else "网络已断开，等待 Wi-Fi 或移动网络恢复")
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification(if (available) "正在安全重连" else "等待网络恢复"))
+        if (available) main.postDelayed(restart, 1000)
+    }
+
     private fun disconnect(message: String? = null) {
+        policy?.cancel()
+        initialKey = ""
+        main.removeCallbacks(initialTimeout)
+        main.removeCallbacks(restart)
+        monitor?.close()
         synchronized(lifecycleLock) { closing = true; stopMessage = message }
         VpnState.stopping()
         NativeBridge.stop(generation)
-        if (worker == null) { VpnState.finish(message); stopSelf() }
+        if (worker == null) finish(message)
+    }
+
+    private fun finish(message: String?, attempt: Long? = null) {
+        policy?.cancel()
+        monitor?.close()
+        monitor = null
+        configuration = ""
+        lastNotification = ""
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        VpnState.finish(message, attempt)
+        stopSelf(activeStartId)
     }
 
     override fun onRevoke() { main.post { disconnect() }; super.onRevoke() }
     override fun onDestroy() {
         synchronized(lifecycleLock) { closing = true }
+        destroyed = true
+        policy?.cancel()
+        initialKey = ""
+        main.removeCallbacks(initialTimeout)
+        main.removeCallbacks(restart)
         if (worker != null) VpnState.stopping()
         NativeBridge.stop(generation)
-        networkCallback?.let { runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) } }
+        monitor?.close()
         super.onDestroy()
     }
 

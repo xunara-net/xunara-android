@@ -63,4 +63,70 @@ void main() {
     expect(device.displayName, 'nas.example.test');
     expect(formatBytes(2048), '2.0 KB');
   });
+  test('到期、DNS 和切网字段缺失时不编造状态', () {
+    expect(expiryLabel(null), '服务器未提供');
+    expect(expiryLabel('invalid'), '服务器未提供');
+    expect(expiryLabel('0001-01-01T00:00:00Z'), '不自动过期');
+    expect(expiryLabel('2026-12-31T00:00:00Z'), contains('2026-12-31'));
+    expect(
+      ClientProfile.fromJson({'server': 'https://example.test'}).autoReconnect,
+      isTrue,
+    );
+    final snapshot = VpnSnapshot.fromJson({
+      'phase': 'connected',
+      'generation': 2,
+      'network_label': 'Wi-Fi',
+      'reconnects': 1,
+      'status': {
+        'self_name': 'phone.example.test.',
+        'dns': {
+          'enabled': true,
+          'domains': ['example.test'],
+        },
+        'devices': [
+          {
+            'id': '2',
+            'os': 'linux',
+            'key_expiry': '0001-01-01T00:00:00Z',
+            'relay_name': '测试中继',
+            'routes': ['10.90.0.0/24'],
+          },
+        ],
+      },
+    });
+    expect(snapshot.searchDomains, ['example.test']);
+    expect(snapshot.magicDnsEnabled, isTrue);
+    expect(snapshot.generation, 2);
+    expect(snapshot.devices.single.relayName, '测试中继');
+    expect(osLabel(snapshot.devices.single.os), 'Linux');
+    expect(snapshot.devices.single.routes, ['10.90.0.0/24']);
+  });
+  test('只接受有限的真实 ICMP 诊断结果', () {
+    expect(
+      PingResult.fromJson({
+        'address': '100.80.0.2',
+        'rtt_ms': 12.4,
+        'path': 'relay',
+      }).pathLabel,
+      'DERP 中继',
+    );
+    for (final milliseconds in [-1, double.nan, double.infinity]) {
+      expect(
+        () => PingResult.fromJson({
+          'address': '100.80.0.2',
+          'rtt_ms': milliseconds,
+          'path': 'relay',
+        }),
+        throwsFormatException,
+      );
+    }
+    expect(
+      () => PingResult.fromJson({
+        'address': '100.80.0.2',
+        'rtt_ms': 1,
+        'path': 'unknown',
+      }),
+      throwsFormatException,
+    );
+  });
 }

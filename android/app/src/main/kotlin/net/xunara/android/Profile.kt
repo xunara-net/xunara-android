@@ -2,7 +2,7 @@ package net.xunara.android
 
 import java.net.URI
 
-data class Profile(val server: String, val hostname: String, val acceptRoutes: Boolean) {
+data class Profile(val server: String, val hostname: String, val acceptRoutes: Boolean, val autoReconnect: Boolean = true) {
     fun validated(): Profile {
         val uri = URI(server.trim())
         val host = uri.host ?: error("请输入完整服务器地址")

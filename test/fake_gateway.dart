@@ -13,6 +13,8 @@ class FakeGateway implements VpnGateway {
   int browserCalls = 0;
   int consoleCalls = 0;
   String receivedKey = '';
+  int pingCalls = 0;
+  Future<PingResult>? pingResponse;
   @override
   Future<Bootstrap> bootstrap() async => Bootstrap(profile, current, '0.1.0');
   @override
@@ -56,4 +58,17 @@ class FakeGateway implements VpnGateway {
   Future<void> vpnSettings() async {}
   @override
   Future<void> notificationSettings() async {}
+  @override
+  Future<PingResult> ping(String peerId, {required int generation}) async {
+    pingCalls++;
+    return pingResponse ??
+        Future.value(
+          const PingResult(
+            address: '100.80.0.2',
+            rttMs: 12.5,
+            path: 'relay',
+            relayRegion: 900,
+          ),
+        );
+  }
 }

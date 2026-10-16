@@ -9,15 +9,29 @@ object VpnState {
 
     @Synchronized fun phase(): String = value.optString("phase", "disconnected")
 
-    @Synchronized fun begin() {
-        value = JSONObject().put("phase", "connecting").put("message", "正在安全连接服务器")
+    @Synchronized fun begin(generation: Long = 0, reconnecting: Boolean = false) {
+        value = JSONObject().put("phase", if (reconnecting) "reconnecting" else "connecting")
+            .put("generation", generation).put("message", "正在安全连接服务器")
+    }
+
+    @Synchronized fun generation(): Long = value.optLong("generation")
+
+    @Synchronized fun network(label: String, reconnects: Int) {
+        value.put("network_label", label).put("reconnects", reconnects)
+    }
+
+    @Synchronized fun reconnecting(message: String) {
+        value.put("phase", "reconnecting").put("message", message)
+        value.remove("status")
+        value.remove("authorization_url")
     }
 
     @Synchronized fun stopping() {
         value.put("phase", "stopping").remove("authorization_url")
     }
 
-    @Synchronized fun finish(error: String? = null) {
+    @Synchronized fun finish(error: String? = null, generation: Long? = null) {
+        if (generation != null && generation != generation()) return
         value = JSONObject().put("phase", if (error == null) "disconnected" else "error")
         if (error != null) value.put("message", error)
     }

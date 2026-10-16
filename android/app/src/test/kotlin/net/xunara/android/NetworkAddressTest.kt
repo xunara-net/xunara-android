@@ -6,6 +6,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NetworkAddressTest {
+    @Test fun onLinkGatewayWorksBeforeApi29() {
+        assertTrue(NetworkAddress.isOnLinkGateway(null))
+        assertTrue(NetworkAddress.isOnLinkGateway(InetAddress.getByName("0.0.0.0")))
+        assertTrue(NetworkAddress.isOnLinkGateway(InetAddress.getByName("::")))
+        assertFalse(NetworkAddress.isOnLinkGateway(InetAddress.getByName("192.168.1.1")))
+        assertFalse(NetworkAddress.isOnLinkGateway(InetAddress.getByName("fe80::1")))
+    }
     @Test fun ipv4DnsIsProtectedAsAHostPrefix() {
         assertEquals("100.100.100.100/32", NetworkAddress.prefix(InetAddress.getByName("100.100.100.100"), 32))
     }
