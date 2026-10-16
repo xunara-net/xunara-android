@@ -62,7 +62,7 @@ impl AndroidHost {
         if env.exception_check()? {
             env.exception_clear()?;
         }
-        result.context("Android VPN 平台调用失败")
+        result.with_context(|| format!("Android VPN 回调执行失败（{method}）"))
     }
 
     fn strings(&self, method: &str, port: Option<i32>) -> Result<Vec<String>> {
@@ -84,7 +84,8 @@ impl AndroidHost {
         if env.exception_check()? {
             env.exception_clear()?;
         }
-        result
+        // 只标注固定回调名，不读取 Java 异常正文，避免平台错误夹带连接参数或凭据。
+        result.with_context(|| format!("Android VPN 回调执行失败（{method}）"))
     }
 }
 

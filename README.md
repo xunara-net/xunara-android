@@ -91,10 +91,23 @@ Rust 依赖固定到独立仓库的具体 commit，`Cargo.lock` / `pubspec.lock`
 dart format --output=none --set-exit-if-changed lib test integration_test
 flutter analyze
 flutter test test
+node --test scripts/check-jni-contract.test.cjs
 (cd native && cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked --all-targets)
 flutter build apk --debug
 (cd android && ./gradlew :app:testDebugUnitTest :app:lintDebug)
 ```
+
+发布前必须对最终混淆 APK 验证 JNI 回调，不能以 Debug 连接或 Release 页面检查代替：
+
+```sh
+flutter build apk --release --target-platform android-arm64,android-x64 --split-per-abi
+node scripts/check-jni-contract.cjs build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+node scripts/check-jni-contract.cjs build/app/outputs/flutter-apk/app-x86_64-release.apk
+```
+
+0.3.0 发布包漏保留 `dnsServers()`，会在连接时显示 `Java exception was thrown`；
+0.3.1 修复该混淆规则，并由 CI 检查两个 ABI 的实际 DEX。升级请使用同签名覆盖安装，
+保留原账号与机器身份，不要卸载或清除数据。
 
 真实 VPN 测试先在相邻目录准备 `xunara-client` 和其 `tests/compat` 所需固定版本的 `xunara-server`：
 

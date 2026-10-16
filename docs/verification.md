@@ -1,6 +1,6 @@
 # 2026-10-16 首版验收
 
-最新功能状态以文末 0.3.0 增量验收为准，前面的章节是历史记录。
+最新功能状态以文末增量验收为准，前面的章节是历史记录。
 
 ## What changed
 
@@ -172,5 +172,42 @@ ARM64 / x86_64 Release 包实际 versionCode 为 2003 / 4003，versionName 为 0
 - 专用 Android 36 x86_64 模拟器的 Debug 真实 VPN：系统解析器解析设备名、DNS UDP / TCP、未知私有域 NXDOMAIN、经 ACL 的远程 DNS；选择官方 tsnet 转发 fixture 后 IPv4 / IPv6 TCP 与 peerapi DNS-over-WireGuard；撤销后阻止公网与 DNS 回退、保留私网；同控制器第二账号独立授权及无密钥切回。原 ICMP / ACL / 子网 / 应用分流 / 切网恢复全部通过。
 - DNS 普通上游的真实 UDP 与截断后 TCP 回退、IPv6 scope、远程网段 / 上游自循环避让由 Rust / Kotlin 单测验证；不把这些单测冒充 ARM64 真机验收。
 - Release ARM64 / x86_64 APK 签名和 16 KiB 对齐校验通过，版本 `0.3.0+4`，实际 split versionCode 为 `2004 / 4004`。x86_64 Release 实际安装并检查设置、账号、DNS、出口、应用分流、诊断六页；截图来自该 APK，不连接生产网络。真实 VPN 验收是 Debug 集成测试，不冒充 Release 真机验收。
+
+## 0.3.1 连接异常修复（2026-10-17）
+
+### What changed
+
+- 补齐 `dnsServers()` 的 R8 保留规则。Rust 按固定名称调用 Kotlin；发布包不能删除或改名该方法。
+- JNI 错误标注固定回调名，不读取或打印 Java 异常正文、连接参数或凭据。
+- 新增最终 APK 的 JNI 契约检查：从实际 Rust 调用点提取方法名和签名，用官方 `apkanalyzer` 检查原始 DEX；CI 对两个 ABI 的发布包执行，不使用反混淆映射掩盖改名。
+- 版本 `0.3.1+5`，ARM64 / x86_64 实际 versionCode 为 `2005 / 4005`。
+
+### Why
+
+0.3.0 的 `usage.txt` 明确记录 `dnsServers()` 被裁剪，两个已发布 APK 的 DEX 均缺失该方法。读取系统 DNS 位于建立首张网络映射的路径，即使未开启 MagicDNS，也会触发 JNI 异常。Debug 不进行这项裁剪，之前的 Debug VPN 集成和 Release 页面检查没有覆盖故障。
+
+在专用模拟器安装原 0.3.0 Release，使用隔离服务中已注册的临时机器身份，实际复现 `Java exception was thrown` 且未显示已连接；保留相同身份、配置和签名覆盖安装 0.3.1 后，真实 VPN 成功建立。不用删除账号、清空数据或重新签发设备密钥绕过问题。
+
+### Compatibility impact
+
+- 内核仍固定 `33f47a10861fb444aeef915c8e0c233b22d4de5e`，不修改控制面、DNS / Tailscale 协议、套餐、身份目录或配置迁移。
+- 本地发布签名与上一公开预览包一致，支持覆盖升级。其他 CI 签名不自动视为相同；签名冲突时不建议卸载或清除数据。
+
+### Security impact
+
+- 没有关闭 R8、TLS、ACL、套接字保护或身份检查，也未添加可从外部注入配置或密钥的生产入口。
+- 回归只访问 rootless 隔离 fixture。测试身份和模拟器偏好仅在专用 AVD 中准备；真实流量由普通 shell UID 2000 发起，不能把 root 准备步骤当作 VPN 可达验收。
+- 发布包保持不可调试；Auth Key、私钥和生产账户不进入仓库、APK、公开日志或测试截图。
+
+### Tests
+
+- 5 项 JNI 契约检查器测试通过；两个原 0.3.0 发布包均被正确拒绝；两个新发布包均保留全部 6 个回调及原始签名。
+- Dart 格式、analyze、32 项测试；Rust fmt、clippy、3 项生命周期测试；Kotlin 20 项测试与 Debug / Release lint 通过。
+- Android 36 x86_64 的实际混淆 Release，覆盖升级后确认原机器地址不变；普通 UID 的 ICMP、IPv4 / IPv6 TCP、私有 DERP、批准子网访问成功，禁止 ACL 端口仍拒绝。
+- 在 Release 界面开启网络 DNS 后自动重建连接，Android 系统解析器成功解析 `rust-router.core.test`。
+- Release 选择官方 tsnet 出口后，实际 IPv4 / IPv6 公网 TCP 和 peerapi 加密 DNS 成功；撤销出口后 VPN 保持、公网被阻止、私网仍可访问，UDP / TCP DNS 均返回 SERVFAIL，不回退普通网络。
+- 两 ABI 的 Release 构建、签名和 16 KiB APK 对齐校验通过；Release manifest 的 `debuggable` 为 false。
+
+ARM64 物理手机、各厂商后台和物理移动网络仍需真机验收，不用 x86_64 模拟器结果冒充。
 
 仍需单独验收：ARM64 真机、厂商省电 / 长时间后台、真实蜂窝漫游、Android UDP 直连、严格私人 DNS / 应用 DoH 与长期正式签名。本轮没有实现共享 masquerade、Tailnet Lock 或手机子网 / 出口转发。自定义 DoH / DoT 解析器和 DNSSEC 验证也不在支持范围内。

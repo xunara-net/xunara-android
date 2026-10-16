@@ -198,7 +198,7 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Android 预览版 0.3.0 · Rust ${controller.coreVersion}',
+                'Android 预览版 0.3.1 · Rust ${controller.coreVersion}',
                 style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
               ),
             ],
@@ -209,7 +209,7 @@ class SettingsPage extends StatelessWidget {
         onPressed: () => showLicensePage(
           context: context,
           applicationName: '玄序 Xunara',
-          applicationVersion: '0.3.0 预览版',
+          applicationVersion: '0.3.1 预览版',
         ),
         icon: const Icon(Icons.description_outlined, size: 18),
         label: const Text('开源组件声明'),

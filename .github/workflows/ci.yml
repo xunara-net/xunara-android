@@ -35,6 +35,7 @@ jobs:
           dart format --output=none --set-exit-if-changed lib test integration_test
           flutter analyze
           flutter test test
+          node --test scripts/check-jni-contract.test.cjs
           cd native
           cargo fmt --check
           cargo clippy --locked --all-targets -- -D warnings
@@ -56,6 +57,7 @@ jobs:
           cp build/app/outputs/flutter-apk/app-x86_64-release.apk build/preview/xunara-android-preview-x86_64.apk
           version=$(sed -n 's/^version: //p' pubspec.yaml)
           for package in build/preview/*.apk; do
+            node scripts/check-jni-contract.cjs "$package"
             case "$package" in
               *arm64-v8a.apk) apkCode=$((2000 + ${version#*+}));;
               *x86_64.apk) apkCode=$((4000 + ${version#*+}));;

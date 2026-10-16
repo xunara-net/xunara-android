@@ -5,5 +5,6 @@
     public int configureTunnel(java.lang.String);
     public java.lang.String localNetworks();
     public java.lang.String localEndpoints(int);
+    public java.lang.String dnsServers();
     public void onCoreEvent(java.lang.String);
 }
