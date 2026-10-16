@@ -61,21 +61,22 @@ class MainActivity : FlutterActivity() {
                     }
                     "saveProfile" -> {
                         requireIdle()
-                        val profile = Profile(call.argument<String>("server") ?: "", call.argument<String>("hostname") ?: "", call.argument<Boolean>("accept_routes") ?: true, call.argument<Boolean>("auto_reconnect") ?: true,
-                            AppRouting(AppRoutingMode.parse(call.argument<String>("app_routing") ?: "all"), call.argument<List<String>>("applications") ?: emptyList())).validated()
+                        val json = JSONObject(call.arguments as Map<*, *>)
+                        if (json.optString("id").isEmpty()) json.put("id", java.util.UUID.randomUUID().toString())
+                        val profile = ProfileStore.fromJson(json)
                         val saved = ProfileStore(this).save(profile)
                         VpnState.finish()
                         result.success(ProfileStore.toJson(saved.current).toString())
                     }
                     "selectProfile" -> {
                         requireIdle()
-                        ProfileStore(this).select(call.argument<String>("server") ?: "")
+                        ProfileStore(this).select(call.argument<String>("id") ?: "")
                         VpnState.finish()
                         result.success(null)
                     }
                     "forgetProfile" -> {
                         requireIdle()
-                        ProfileStore(this).remove(call.argument<String>("server") ?: "")
+                        ProfileStore(this).remove(call.argument<String>("id") ?: "")
                         result.success(null)
                     }
                     "connect" -> {

@@ -15,7 +15,6 @@ import android.system.OsConstants
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.security.MessageDigest
 
 class XunaraVpnService : VpnService() {
     private val main = Handler(Looper.getMainLooper())
@@ -66,13 +65,13 @@ class XunaraVpnService : VpnService() {
         val notification = notification("正在连接玄序网络")
         if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
         else startForeground(NOTIFICATION, notification)
-        val hash = MessageDigest.getInstance("SHA-256").digest(profile.server.toByteArray()).joinToString("") { "%02x".format(it) }
-        // 每个控制面独立保存机器身份；noBackupFilesDir 禁止云备份恢复成克隆设备。
-        val directory = File(noBackupFilesDir, "core/$hash")
+        // 即使控制地址相同，不同账号配置也必须使用独立机器身份。
+        val directory = File(noBackupFilesDir, "core/${profile.identityDirectory()}")
         directory.mkdirs()
         Os.chmod(directory.absolutePath, 448)
         configuration = JSONObject().put("server", profile.server).put("hostname", profile.hostname)
             .put("accept_routes", profile.acceptRoutes).put("state_dir", directory.absolutePath)
+            .put("accept_dns", profile.acceptDns).put("exit_node_id", profile.exitNodeId)
             .put("interface", "xunara0").put("listen", "0.0.0.0:0").toString()
         appRouting = profile.appRouting
         policy = ReconnectPolicy(profile.autoReconnect)
@@ -139,9 +138,12 @@ class XunaraVpnService : VpnService() {
         val routes = configuration.getJSONArray("routes")
         for (index in 0 until routes.length()) {
             val (address, prefix) = splitPrefix(routes.getString(index))
-            require(prefix > 0) { "不接管默认路由" }
             builder.addRoute(address, prefix)
         }
+        val dns = configuration.getJSONArray("dns_servers")
+        for (index in 0 until dns.length()) builder.addDnsServer(dns.getString(index))
+        val domains = configuration.getJSONArray("search_domains")
+        for (index in 0 until domains.length()) builder.addSearchDomain(domains.getString(index))
         if (Build.VERSION.SDK_INT >= 29) builder.setMetered(false)
         val tunnel = checkNotNull(builder.establish()) { "VPN 权限已撤销" }
         val attempt = generation
@@ -163,13 +165,14 @@ class XunaraVpnService : VpnService() {
     }
 
     fun localEndpoints(port: Int): String = JSONArray(monitor?.snapshot?.ipv4Addresses?.map { "$it:$port" } ?: emptyList<String>()).toString()
+    fun dnsServers(): String = JSONArray(monitor?.snapshot?.dnsServers ?: emptyList<String>()).toString()
 
     fun onCoreEvent(raw: String): Unit = synchronized(lifecycleLock) {
         if (closing) return
         val event = JSONObject(raw)
         VpnState.update(event)
         val text = when (VpnState.phase()) {
-            "connected" -> "已连接 · 仅私有网络流量经过玄序"
+            "connected" -> if (JSONObject(configuration).optString("exit_node_id").isEmpty()) "已连接 · 私有网络" else "已连接 · 已选择出口节点，请留意出口状态"
             "authorizing" -> "等待浏览器登录并批准设备"
             "reconnecting" -> "正在重新连接"
             else -> "正在建立加密连接"

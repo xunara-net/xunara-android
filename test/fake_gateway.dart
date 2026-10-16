@@ -7,6 +7,7 @@ class FakeGateway implements VpnGateway {
   ClientProfile profile = const ClientProfile(
     server: 'https://example.test:9090/',
     hostname: 'android-test',
+    id: 'home',
   );
   VpnSnapshot current = const VpnSnapshot();
   bool denyPermission = false;
@@ -44,23 +45,26 @@ class FakeGateway implements VpnGateway {
   @override
   Future<ClientProfile> saveProfile(ClientProfile profile) async {
     profileChanges++;
-    savedProfiles[this.profile.server] = this.profile;
-    savedProfiles[profile.server] = profile;
+    savedProfiles[this.profile.id] = this.profile;
+    if (profile.id.isEmpty) {
+      profile = profile.copyWith(id: 'account-$profileChanges');
+    }
+    savedProfiles[profile.id] = profile;
     current = const VpnSnapshot();
     return this.profile = profile;
   }
 
   @override
-  Future<void> selectProfile(String server) async {
+  Future<void> selectProfile(String id) async {
     profileChanges++;
-    profile = savedProfiles[server]!;
+    profile = savedProfiles[id]!;
     current = const VpnSnapshot();
   }
 
   @override
-  Future<void> forgetProfile(String server) async {
+  Future<void> forgetProfile(String id) async {
     profileChanges++;
-    savedProfiles.remove(server);
+    savedProfiles.remove(id);
   }
 
   @override

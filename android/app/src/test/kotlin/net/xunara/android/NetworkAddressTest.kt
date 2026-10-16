@@ -6,6 +6,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NetworkAddressTest {
+    @Test fun resolverPreservesNumericIpv6ScopeAndExplicitPort() {
+        assertEquals("192.168.1.1:53", NetworkAddress.resolver(InetAddress.getByName("192.168.1.1")))
+        val address = Inet6Address.getByAddress(null, InetAddress.getByName("fe80::1").address, 7)
+        assertTrue(NetworkAddress.resolver(address).endsWith("%7]:53"))
+    }
     @Test fun onLinkGatewayWorksBeforeApi29() {
         assertTrue(NetworkAddress.isOnLinkGateway(null))
         assertTrue(NetworkAddress.isOnLinkGateway(InetAddress.getByName("0.0.0.0")))

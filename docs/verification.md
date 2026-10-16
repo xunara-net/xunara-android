@@ -1,5 +1,7 @@
 # 2026-10-16 首版验收
 
+最新功能状态以文末 0.3.0 增量验收为准，前面的章节是历史记录。
+
 ## What changed
 
 独立 Flutter / Kotlin / JNI Android 仓库，复用 xunara-client Rust 数据面，不修改控制服务器。
@@ -137,3 +139,38 @@ ARM64 / x86_64 Release 包实际 versionCode 为 2003 / 4003，versionName 为 0
 仍未宣称完成：ARM64 物理手机、各厂商后台长时间运行、物理蜂窝漫游、Android UDP
 直连、正式长期签名、系统级 MagicDNS、出口节点、共享地址转换、Tailnet Lock。
 保持预览版标识；两套测试签名不同不能视为可无损覆盖安装的稳定升级方案。
+
+## 0.3.0 增量验收
+
+### What changed
+
+落地可选 VPN DNS / MagicDNS、双栈指定出口、同控制器多账号与多控制器切换。旧配置迁移到 catalog_v2，保留原哈希身份目录；新增配置使用独立 UUID 目录。连接后展示控制面确认的设备归属，切换后的迟到状态不能覆盖新账号。
+
+### Why
+
+不能只显示 DNS 配置或出口开关。验收必须包括真实解析、加密转发、撤销后不回退，以及同服务器不同账号确实使用不同设备身份，再无密钥切回原设备。
+
+### Compatibility impact
+
+- Rust 内核固定到 `33f47a10861fb444aeef915c8e0c233b22d4de5e`，服务端没有新迁移或协议修改。
+- 修复 DERPRegion 增量没有更新 HomeDERP、首张 DERPMap 后延迟上报 home 导致的单向通信；按上游实际代码接受显式 A / AAAA 扩展记录。
+- Linux 不接管系统 DNS / 默认出口。Android 默认仍是私网模式，DNS 与出口由用户明确开启；手机不是子网或出口路由器。
+
+### Security impact
+
+- 所选出口撤销后保留有效 VPN 的双栈接管路由，公网与 DNS 不回退；私网仍能访问。主动断开、系统撤销 VPN / 杀进程后恢复普通网络，不冒充锁定模式。
+- DNS 地址避让 LAN、远程网段、解析器与扩展地址；外部查询绑定随机事务和问题，普通网络 UDP / TCP socket 继续保护；IPv6 系统 DNS 保留数字 scope。
+- 账号备注不当成人类认证；两个测试账号的服务端用户 ID、设备 ID 和 IP 均不同，切回时不再次提供 Auth Key，原设备和归属不变。
+- fixture 位于 rootless user/net namespace，所有认证文件只从 stdin 写入专用模拟器私有缓存，读取后删除。测试明确 `--no-uninstall` 保留身份，不因签名或重跑清除数据；不触碰真机、生产账号或部署。
+
+### Tests
+
+- Dart / Widget 32 项、格式检查与 `flutter analyze` 通过；涵盖开关真实状态、出口候选与失效提示、同地址账号、切换先断开、旧账号迟到状态、小屏与既有接入流程。
+- Kotlin 20 项单测，Debug assemble / unit test / lint 与 Release assemble / lint 通过；包括独立账号目录、旧目录沿用、同 ID 不可改控制地址、IPv6 DNS scope。
+- 原生 Rust 3 项 lifecycle 测试、fmt / clippy / test 与 ARM64 交叉 clippy，通过锁定 Git 源构建 ARM64 / x86_64 JNI。
+- 核心 Rust 27 项单测、官方 STUN 解析、真实 Linux namespace 官方 tsnet 双向互通、子网、ACL、UDP 阻断后的 DERP 回退恢复通过；本轮同时完成 SNAT、身份重连及非本程序规则保留回归。
+- 专用 Android 36 x86_64 模拟器的 Debug 真实 VPN：系统解析器解析设备名、DNS UDP / TCP、未知私有域 NXDOMAIN、经 ACL 的远程 DNS；选择官方 tsnet 转发 fixture 后 IPv4 / IPv6 TCP 与 peerapi DNS-over-WireGuard；撤销后阻止公网与 DNS 回退、保留私网；同控制器第二账号独立授权及无密钥切回。原 ICMP / ACL / 子网 / 应用分流 / 切网恢复全部通过。
+- DNS 普通上游的真实 UDP 与截断后 TCP 回退、IPv6 scope、远程网段 / 上游自循环避让由 Rust / Kotlin 单测验证；不把这些单测冒充 ARM64 真机验收。
+- Release ARM64 / x86_64 APK 签名和 16 KiB 对齐校验通过，版本 `0.3.0+4`，实际 split versionCode 为 `2004 / 4004`。x86_64 Release 实际安装并检查设置、账号、DNS、出口、应用分流、诊断六页；截图来自该 APK，不连接生产网络。真实 VPN 验收是 Debug 集成测试，不冒充 Release 真机验收。
+
+仍需单独验收：ARM64 真机、厂商省电 / 长时间后台、真实蜂窝漫游、Android UDP 直连、严格私人 DNS / 应用 DoH 与长期正式签名。本轮没有实现共享 masquerade、Tailnet Lock 或手机子网 / 出口转发。自定义 DoH / DoT 解析器和 DNSSEC 验证也不在支持范围内。

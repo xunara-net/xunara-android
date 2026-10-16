@@ -19,6 +19,26 @@ class ConnectPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
+        if (connected && snapshot.ownerLogin.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              '设备归属：${snapshot.ownerLogin}',
+              style: const TextStyle(color: Colors.blueGrey),
+            ),
+          ),
+        if (connected &&
+            controller.profile!.exitNodeId.isNotEmpty &&
+            !snapshot.exitNodeAvailable)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                '出口节点不可用：公网流量已阻止。请在设置中检查出口，或关闭出口模式。',
+                style: TextStyle(color: Colors.orange),
+              ),
+            ),
+          ),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -58,7 +78,9 @@ class ConnectPage extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   phase == ConnectionPhase.disconnected
-                      ? '一键连接电脑、NAS 和服务器\n仅接管私有网络，不影响日常上网'
+                      ? controller.profile!.exitNodeId.isEmpty
+                            ? '一键连接电脑、NAS 和服务器\n默认仅连接私有网络'
+                            : '已选择出口：${controller.profile!.exitNodeName}\n连接后参与 VPN 的应用通过出口上网'
                       : snapshot.message,
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.blueGrey, height: 1.5),

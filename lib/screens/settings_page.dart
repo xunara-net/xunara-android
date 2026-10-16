@@ -6,6 +6,7 @@ import 'dns_info_page.dart';
 import 'profiles_page.dart';
 import 'app_routing_page.dart';
 import 'system_diagnostics_page.dart';
+import 'exit_node_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({required this.controller, super.key});
@@ -75,8 +76,8 @@ class SettingsPage extends StatelessWidget {
             const Divider(height: 1, indent: 56),
             ListTile(
               leading: const Icon(Icons.swap_horiz_rounded),
-              title: const Text('常用服务器'),
-              subtitle: Text('已保存 ${controller.profiles.length} 个，断开后可切换'),
+              title: const Text('账号与控制器'),
+              subtitle: Text('已保存 ${controller.profiles.length} 项，支持同一控制器多账号'),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -100,7 +101,12 @@ class SettingsPage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.language_rounded),
               title: const Text('设备域名与 DNS'),
-              subtitle: const Text('查看 MagicDNS 配置，保留手机原有解析器'),
+              subtitle: Text(
+                controller.profile!.acceptDns ||
+                        controller.profile!.exitNodeId.isNotEmpty
+                    ? 'VPN 内 DNS 已开启'
+                    : '按需启用设备域名解析',
+              ),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -115,6 +121,22 @@ class SettingsPage extends StatelessWidget {
               subtitle: const Text('管理账号、设备、邀请与访问权限'),
               trailing: const Icon(Icons.open_in_new_rounded, size: 18),
               onTap: () => controller.perform(controller.gateway.openConsole),
+            ),
+            const Divider(height: 1, indent: 56),
+            ListTile(
+              leading: const Icon(Icons.public_rounded),
+              title: const Text('出口节点'),
+              subtitle: Text(
+                controller.profile!.exitNodeId.isEmpty
+                    ? '默认关闭，不接管日常上网'
+                    : controller.profile!.exitNodeName,
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ExitNodePage(controller: controller),
+                ),
+              ),
             ),
           ],
         ),
@@ -176,7 +198,7 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Android 预览版 0.2.0 · Rust ${controller.coreVersion}',
+                'Android 预览版 0.3.0 · Rust ${controller.coreVersion}',
                 style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
               ),
             ],
@@ -187,7 +209,7 @@ class SettingsPage extends StatelessWidget {
         onPressed: () => showLicensePage(
           context: context,
           applicationName: '玄序 Xunara',
-          applicationVersion: '0.2.0 预览版',
+          applicationVersion: '0.3.0 预览版',
         ),
         icon: const Icon(Icons.description_outlined, size: 18),
         label: const Text('开源组件声明'),
@@ -202,7 +224,7 @@ class SettingsPage extends StatelessWidget {
         ),
       const SizedBox(height: 24),
       const Text(
-        '支持 Android 8.0 及以上 · ARM64 / x86_64\n暂不支持系统级 MagicDNS、出口节点或手机充当子网路由器。\n网络切换后默认安全重连；主动断开不会自动连接。',
+        '支持 Android 8.0 及以上 · ARM64 / x86_64\n支持可选 MagicDNS 与出口访问；手机不充当子网或出口路由器。\n网络切换后默认安全重连；主动断开不会自动连接。',
         textAlign: TextAlign.center,
         style: TextStyle(fontSize: 12, color: Colors.blueGrey, height: 1.8),
       ),

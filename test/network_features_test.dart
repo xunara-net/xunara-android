@@ -106,7 +106,7 @@ void main() {
       MaterialApp(home: DnsInfoPage(controller: controller)),
     );
     expect(find.text('服务器已启用'), findsOneWidget);
-    expect(find.text('手机 DNS 保持不变'), findsOneWidget);
+    expect(find.text('VPN DNS 尚未生效'), findsOneWidget);
     expect(find.text('phone.example.test'), findsOneWidget);
     expect(find.text('example.test'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
@@ -120,7 +120,12 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ProfileEditor(controller: controller)),
     );
-    await tester.ensureVisible(find.byKey(const Key('auto-reconnect-switch')));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('auto-reconnect-switch')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('auto-reconnect-switch')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('保存设置'));

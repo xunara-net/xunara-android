@@ -40,6 +40,11 @@ class ClientProfile {
     this.autoReconnect = true,
     this.appRouting = AppRoutingMode.all,
     this.applications = const [],
+    this.id = '',
+    this.label = '',
+    this.acceptDns = false,
+    this.exitNodeId = '',
+    this.exitNodeName = '',
   });
   factory ClientProfile.fromJson(Map<String, dynamic> json) => ClientProfile(
     server: json['server'] as String? ?? '',
@@ -48,6 +53,11 @@ class ClientProfile {
     autoReconnect: json['auto_reconnect'] as bool? ?? true,
     appRouting: AppRoutingMode.parse(json['app_routing'] as String? ?? 'all'),
     applications: (json['applications'] as List? ?? []).cast<String>(),
+    id: json['id'] as String? ?? '',
+    label: json['label'] as String? ?? '',
+    acceptDns: json['accept_dns'] as bool? ?? false,
+    exitNodeId: json['exit_node_id'] as String? ?? '',
+    exitNodeName: json['exit_node_name'] as String? ?? '',
   );
 
   final String server;
@@ -56,6 +66,12 @@ class ClientProfile {
   final bool autoReconnect;
   final AppRoutingMode appRouting;
   final List<String> applications;
+  final String id;
+  final String label;
+  final bool acceptDns;
+  final String exitNodeId;
+  final String exitNodeName;
+  String get displayLabel => label.isEmpty ? displayServer : label;
   String get displayServer => Uri.tryParse(server)?.authority ?? server;
   Map<String, dynamic> toJson() => {
     'server': server,
@@ -64,6 +80,11 @@ class ClientProfile {
     'auto_reconnect': autoReconnect,
     'app_routing': appRouting.name,
     'applications': applications,
+    'id': id,
+    'label': label,
+    'accept_dns': acceptDns,
+    'exit_node_id': exitNodeId,
+    'exit_node_name': exitNodeName,
   };
 
   ClientProfile copyWith({
@@ -73,6 +94,11 @@ class ClientProfile {
     bool? autoReconnect,
     AppRoutingMode? appRouting,
     List<String>? applications,
+    String? id,
+    String? label,
+    bool? acceptDns,
+    String? exitNodeId,
+    String? exitNodeName,
   }) => ClientProfile(
     server: server ?? this.server,
     hostname: hostname ?? this.hostname,
@@ -80,6 +106,11 @@ class ClientProfile {
     autoReconnect: autoReconnect ?? this.autoReconnect,
     appRouting: appRouting ?? this.appRouting,
     applications: applications ?? this.applications,
+    id: id ?? this.id,
+    label: label ?? this.label,
+    acceptDns: acceptDns ?? this.acceptDns,
+    exitNodeId: exitNodeId ?? this.exitNodeId,
+    exitNodeName: exitNodeName ?? this.exitNodeName,
   );
 
   static String? validateServer(String? raw) {
@@ -118,6 +149,8 @@ class NetworkDevice {
     this.os = '',
     this.keyExpiry,
     this.routes = const [],
+    this.stableId = '',
+    this.exitNode = false,
   });
   factory NetworkDevice.fromJson(Map<String, dynamic> json) => NetworkDevice(
     id: json['id'] as String? ?? '',
@@ -129,6 +162,8 @@ class NetworkDevice {
     os: json['os'] as String? ?? '',
     keyExpiry: json['key_expiry'] as String?,
     routes: (json['routes'] as List? ?? []).cast<String>(),
+    stableId: json['stable_id'] as String? ?? '',
+    exitNode: json['exit_node'] as bool? ?? false,
   );
   final String id;
   final String name;
@@ -139,6 +174,8 @@ class NetworkDevice {
   final String os;
   final String? keyExpiry;
   final List<String> routes;
+  final String stableId;
+  final bool exitNode;
   String get displayName => name.replaceFirst(RegExp(r'\.$'), '');
   String get pathLabel => path == 'direct' ? '直连已探测' : '中继候选';
 }
@@ -189,10 +226,15 @@ class VpnSnapshot {
     this.keyExpiry,
     this.magicDnsEnabled = false,
     this.searchDomains = const [],
+    this.dnsActive = false,
+    this.dnsAddress = '',
+    this.exitNodeAvailable = false,
+    this.ownerLogin = '',
   });
   factory VpnSnapshot.fromJson(Map<String, dynamic> json) {
     final status = json['status'] as Map<String, dynamic>? ?? {};
     final dns = status['dns'] as Map<String, dynamic>? ?? {};
+    final exit = status['exit_node'] as Map<String, dynamic>? ?? {};
     return VpnSnapshot(
       phase: ConnectionPhase.values.firstWhere(
         (phase) => phase.name == json['phase'],
@@ -221,6 +263,10 @@ class VpnSnapshot {
       keyExpiry: status['key_expiry'] as String?,
       magicDnsEnabled: dns['enabled'] as bool? ?? false,
       searchDomains: (dns['domains'] as List? ?? []).cast<String>(),
+      dnsActive: dns['active'] as bool? ?? false,
+      dnsAddress: dns['address'] as String? ?? '',
+      exitNodeAvailable: exit['available'] as bool? ?? false,
+      ownerLogin: status['owner_login'] as String? ?? '',
     );
   }
   final ConnectionPhase phase;
@@ -239,6 +285,10 @@ class VpnSnapshot {
   final String? keyExpiry;
   final bool magicDnsEnabled;
   final List<String> searchDomains;
+  final bool dnsActive;
+  final String dnsAddress;
+  final bool exitNodeAvailable;
+  final String ownerLogin;
 }
 
 String expiryLabel(String? raw) {

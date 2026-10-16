@@ -18,6 +18,7 @@ while IFS="$(printf '\t')" read -r package version manifest expression; do
         cat "$file" >>"$temporary/notice.txt"
     done <"$temporary/files"
     case "$package" in
+        jni|jni-macros) if [ "$version" = 0.22.4 ]; then cat "$root/native/notices/jni-rs-0.22.4.txt" >>"$temporary/notice.txt"; fi;;
         ts_capabilityversion|ts_control_noise|ts_hexdump|ts_keys|ts_noise) cat "$root/native/notices/tailscale-rs-0.6.1.txt" >>"$temporary/notice.txt";;
         boringtun|jni-sys-macros|cesu8) cat "$root/native/notices/$package-$version.txt" >>"$temporary/notice.txt";;
     esac

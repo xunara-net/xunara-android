@@ -22,8 +22,8 @@ abstract class VpnGateway {
   Future<Bootstrap> bootstrap();
   Future<VpnSnapshot> snapshot();
   Future<ClientProfile> saveProfile(ClientProfile profile);
-  Future<void> selectProfile(String server);
-  Future<void> forgetProfile(String server);
+  Future<void> selectProfile(String id);
+  Future<void> forgetProfile(String id);
   Future<List<InstalledApplication>> applications();
   Future<SystemDiagnostics> systemDiagnostics();
   Future<void> batterySettings();
@@ -67,11 +67,11 @@ class AndroidVpnGateway implements VpnGateway {
   Future<ClientProfile> saveProfile(ClientProfile profile) async =>
       ClientProfile.fromJson(await _json('saveProfile', profile.toJson()));
   @override
-  Future<void> selectProfile(String server) =>
-      _channel.invokeMethod<void>('selectProfile', {'server': server});
+  Future<void> selectProfile(String id) =>
+      _channel.invokeMethod<void>('selectProfile', {'id': id});
   @override
-  Future<void> forgetProfile(String server) =>
-      _channel.invokeMethod<void>('forgetProfile', {'server': server});
+  Future<void> forgetProfile(String id) =>
+      _channel.invokeMethod<void>('forgetProfile', {'id': id});
   @override
   Future<List<InstalledApplication>> applications() async {
     final json = await _json('applications');

@@ -18,6 +18,7 @@ class AppController extends ChangeNotifier {
   bool busy = false;
   bool _disposed = false;
   bool _refreshing = false;
+  int _stateRevision = 0;
   Timer? _timer;
 
   Future<void> initialize() async {
@@ -50,12 +51,16 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    if (_disposed || _refreshing || profile == null) return;
+    if (_disposed || _refreshing || busy || profile == null) return;
+    final revision = _stateRevision;
     _refreshing = true;
     try {
-      snapshot = await gateway.snapshot();
+      final current = await gateway.snapshot();
+      if (_disposed || busy || revision != _stateRevision) return;
+      snapshot = current;
       if (!_disposed) notifyListeners();
     } on Exception {
+      if (_disposed || busy || revision != _stateRevision) return;
       // 不沿用旧的“已连接”结果；系统通道失联不等于隧道仍然健康。
       snapshot = const VpnSnapshot(
         phase: ConnectionPhase.error,
@@ -70,6 +75,8 @@ class AppController extends ChangeNotifier {
   Future<bool> perform(Future<void> Function() action) async {
     if (busy || _disposed) return false;
     busy = true;
+    // 切换后丢弃旧账号尚未返回的状态，不能把旧设备归属显示在新账号下面。
+    _stateRevision++;
     error = null;
     notifyListeners();
     try {
@@ -139,6 +146,74 @@ class AppController extends ChangeNotifier {
       _changeProfiles(() => gateway.selectProfile(server));
   Future<bool> forgetProfile(String server) =>
       _changeProfiles(() => gateway.forgetProfile(server));
+
+  Future<bool> applyNetworkSettings(ClientProfile next) async {
+    if (profile == null ||
+        next.id != profile!.id ||
+        next.server != profile!.server) {
+      error = '当前账号已变化，请重新打开网络设置';
+      if (!_disposed) notifyListeners();
+      return false;
+    }
+    return _withStopped(() async {
+      await gateway.saveProfile(next);
+    }, reconnect: true);
+  }
+
+  Future<bool> switchAccount(String id) =>
+      _withStopped(() => gateway.selectProfile(id), reconnect: false);
+
+  Future<bool> _withStopped(
+    Future<void> Function() change, {
+    required bool reconnect,
+  }) async {
+    if (profile == null ||
+        !{
+          ConnectionPhase.connected,
+          ConnectionPhase.disconnected,
+          ConnectionPhase.error,
+        }.contains(snapshot.phase)) {
+      error = '请先结束授权或等待连接完成';
+      if (!_disposed) notifyListeners();
+      return false;
+    }
+    final wasConnected = snapshot.phase == ConnectionPhase.connected;
+    return perform(() async {
+      if (wasConnected) {
+        await gateway.disconnect();
+        final deadline = DateTime.now().add(const Duration(seconds: 15));
+        do {
+          snapshot = await gateway.snapshot();
+          if (!snapshot.phase.active) break;
+          if (DateTime.now().isAfter(deadline)) {
+            throw PlatformException(
+              code: 'STOP_TIMEOUT',
+              message: '旧连接尚未退出，未切换账号或网络设置',
+            );
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        } while (true);
+      }
+      try {
+        await change();
+        final current = await gateway.bootstrap();
+        profile = current.profile;
+        profiles = current.profiles.isEmpty
+            ? [current.profile]
+            : current.profiles;
+        snapshot = current.snapshot;
+      } on Exception {
+        profile = null;
+        profiles = const [];
+        snapshot = const VpnSnapshot(phase: ConnectionPhase.error);
+        rethrow;
+      }
+      if (wasConnected && reconnect) {
+        await gateway.connect();
+        snapshot = await gateway.snapshot();
+      }
+    });
+  }
 
   @override
   void dispose() {

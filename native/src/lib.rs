@@ -117,6 +117,12 @@ impl Host for AndroidHost {
         self.strings("localEndpoints", Some(i32::from(port)))
             .unwrap_or_default()
     }
+    fn dns_servers(&self) -> Result<Vec<std::net::SocketAddr>> {
+        self.strings("dnsServers", None)?
+            .iter()
+            .map(|address| address.parse().context("Android DNS 地址无效"))
+            .collect()
+    }
     fn event(&self, value: &Value) {
         if let Ok(text) = serde_json::to_string(value) {
             let _ = self.call("onCoreEvent", "(Ljava/lang/String;)V", Some(&text), None);

@@ -17,7 +17,8 @@ void main() {
     final preferences = await File(
       '/data/user/0/net.xunara.android/shared_prefs/profile.xml',
     ).readAsString();
-    expect(preferences.contains('name="catalog_v1"'), isTrue);
+    expect(preferences.contains('name="catalog_v2"'), isTrue);
+    expect(preferences.contains('name="catalog_v1"'), isFalse);
     for (final legacyKey in [
       'server',
       'hostname',
@@ -53,6 +54,16 @@ void main() {
       'routing-excluded-verified',
       'routing-restored',
       'routing-restored-verified',
+      'dns-ready',
+      'dns-verified',
+      'exit-ready',
+      'exit-verified',
+      'exit-revoked',
+      'exit-revoked-verified',
+      'second-ready',
+      'second-verified',
+      'first-restored',
+      'first-restored-verified',
     ]) {
       final marker = File('$cache/integration-$name');
       if (await marker.exists()) await marker.delete();
@@ -83,8 +94,20 @@ void main() {
       expect(connected.addresses, isNotEmpty);
       expect(connected.magicDnsEnabled, isTrue);
       expect(connected.searchDomains, contains('core.test'));
-      await File('$cache/integration-connected')
-          .writeAsString(jsonEncode({'addresses': connected.addresses}));
+      await File('$cache/integration-connected').writeAsString(
+        jsonEncode({
+          'addresses': connected.addresses,
+          'devices': connected.devices
+              .map(
+                (device) => {
+                  'id': device.id,
+                  'name': device.name,
+                  'addresses': device.addresses,
+                },
+              )
+              .toList(),
+        }),
+      );
       // 流量由 shell UID 发起，避免用已从 VPN 排除的客户端自身假装验证数据面。
       final finish = File('$cache/integration-finish');
       final deadline = DateTime.now().add(const Duration(minutes: 3));
@@ -173,34 +196,35 @@ void main() {
       final reconnected = await waitFor(gateway, ConnectionPhase.connected);
       expect(reconnected.addresses, connected.addresses);
       await expectLater(
-        gateway.selectProfile(initial.profile.server),
+        gateway.selectProfile(initial.profile.id),
         throwsA(isA<PlatformException>()),
       );
       await gateway.disconnect();
       await waitFor(gateway, ConnectionPhase.disconnected);
       final testProfile = (await gateway.bootstrap()).profile;
       const unused = 'https://integration-unused.invalid/';
-      await gateway.saveProfile(
+      final unusedProfile = await gateway.saveProfile(
         testProfile.copyWith(
+          id: '',
           server: unused,
           hostname: 'office-phone',
           acceptRoutes: false,
         ),
       );
       expect((await gateway.snapshot()).phase, ConnectionPhase.disconnected);
-      await gateway.selectProfile(testProfile.server);
+      await gateway.selectProfile(testProfile.id);
       final restored = await gateway.bootstrap();
       expect(restored.profile.hostname, testProfile.hostname);
       expect(restored.profile.acceptRoutes, isTrue);
       expect(
-        restored.profiles.map((profile) => profile.server).toSet().length,
+        restored.profiles.map((profile) => profile.id).toSet().length,
         restored.profiles.length,
       );
       await expectLater(
-        gateway.forgetProfile(testProfile.server),
+        gateway.forgetProfile(testProfile.id),
         throwsA(isA<PlatformException>()),
       );
-      await gateway.forgetProfile(unused);
+      await gateway.forgetProfile(unusedProfile.id);
       expect((await gateway.systemDiagnostics()).vpnPermission, isTrue);
       expect(await gateway.applications(), isNotEmpty);
 
@@ -260,6 +284,78 @@ void main() {
       expect(restoredRouting.addresses, connected.addresses);
       await File('$cache/integration-routing-restored').writeAsString('{}');
       await waitForMarker('routing-restored-verified');
+      await gateway.disconnect();
+      await waitFor(gateway, ConnectionPhase.disconnected);
+      await gateway.saveProfile(testProfile.copyWith(acceptDns: true));
+      await gateway.connect();
+      final dns = await waitFor(gateway, ConnectionPhase.connected);
+      expect(dns.dnsActive, isTrue);
+      expect(dns.addresses, connected.addresses);
+      expect(dns.dnsAddress, isNotEmpty);
+      await File('$cache/integration-dns-ready')
+          .writeAsString(jsonEncode({'dns': dns.dnsAddress}));
+      await waitForMarker('dns-verified');
+      final exit = dns.devices.firstWhere(
+        (device) => device.exitNode && device.name.startsWith('official-exit.'),
+      );
+      await gateway.disconnect();
+      await waitFor(gateway, ConnectionPhase.disconnected);
+      await gateway.saveProfile(
+        testProfile.copyWith(
+          exitNodeId: exit.stableId,
+          exitNodeName: exit.name,
+        ),
+      );
+      await gateway.connect();
+      final usingExit = await waitFor(gateway, ConnectionPhase.connected);
+      expect(usingExit.dnsActive, isTrue);
+      expect(usingExit.exitNodeAvailable, isTrue);
+      expect(usingExit.addresses, connected.addresses);
+      await File('$cache/integration-exit-ready')
+          .writeAsString(jsonEncode({'dns': usingExit.dnsAddress}));
+      await waitForMarker('exit-verified');
+      final revokeDeadline = DateTime.now().add(const Duration(seconds: 30));
+      while ((await gateway.snapshot()).exitNodeAvailable) {
+        if (DateTime.now().isAfter(revokeDeadline)) fail('出口撤销没有传播到 Android');
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+      expect((await gateway.snapshot()).phase, ConnectionPhase.connected);
+      await File('$cache/integration-exit-revoked').writeAsString('{}');
+      await waitForMarker('exit-revoked-verified');
+      await gateway.disconnect();
+      await waitFor(gateway, ConnectionPhase.disconnected);
+      final secondSecret = File('$cache/integration-second-auth-key');
+      var secondKey = (await secondSecret.readAsString()).trim();
+      await secondSecret.delete();
+      final second = await gateway.saveProfile(
+        testProfile.copyWith(
+          id: '',
+          hostname: 'android-second-account',
+          label: '第二账号',
+          acceptDns: true,
+        ),
+      );
+      expect(second.id, isNot(testProfile.id));
+      expect(second.server, testProfile.server);
+      await gateway.connect(authKey: secondKey);
+      secondKey = '';
+      final secondConnected = await waitFor(gateway, ConnectionPhase.connected);
+      expect(secondConnected.addresses, isNot(connected.addresses));
+      expect(secondConnected.ownerLogin, 'second-account');
+      expect(secondConnected.ownerLogin, isNot(connected.ownerLogin));
+      await File('$cache/integration-second-ready')
+          .writeAsString(jsonEncode({'addresses': secondConnected.addresses}));
+      await waitForMarker('second-verified');
+      await gateway.disconnect();
+      await waitFor(gateway, ConnectionPhase.disconnected);
+      await gateway.selectProfile(testProfile.id);
+      await gateway.saveProfile(testProfile);
+      await gateway.connect();
+      final firstRestored = await waitFor(gateway, ConnectionPhase.connected);
+      expect(firstRestored.addresses, connected.addresses);
+      expect(firstRestored.ownerLogin, connected.ownerLogin);
+      await File('$cache/integration-first-restored').writeAsString('{}');
+      await waitForMarker('first-restored-verified');
     } finally {
       authKey = '';
       await gateway.disconnect();
@@ -268,12 +364,12 @@ void main() {
       for (final profile in initial.profiles) {
         await gateway.saveProfile(profile);
       }
-      await gateway.selectProfile(initial.profile.server);
-      final previous = initial.profiles.map((profile) => profile.server).toSet()
-        ..add(initial.profile.server);
+      await gateway.selectProfile(initial.profile.id);
+      final previous = initial.profiles.map((profile) => profile.id).toSet()
+        ..add(initial.profile.id);
       for (final profile in (await gateway.bootstrap()).profiles) {
-        if (!previous.contains(profile.server)) {
-          await gateway.forgetProfile(profile.server);
+        if (!previous.contains(profile.id)) {
+          await gateway.forgetProfile(profile.id);
         }
       }
     }

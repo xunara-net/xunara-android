@@ -65,6 +65,7 @@ void main() {
     await controller.initialize();
     final home = controller.profile!;
     final office = home.copyWith(
+      id: 'office',
       server: 'https://office.example/',
       hostname: 'work',
       acceptRoutes: false,
@@ -73,14 +74,14 @@ void main() {
     );
     expect(await controller.save(office), isTrue);
     expect(controller.profiles, hasLength(2));
-    expect(await controller.selectProfile(home.server), isTrue);
+    expect(await controller.selectProfile(home.id), isTrue);
     expect(controller.profile!.server, home.server);
     expect(controller.profile!.appRouting, AppRoutingMode.all);
-    expect(await controller.selectProfile(office.server), isTrue);
+    expect(await controller.selectProfile(office.id), isTrue);
     expect(controller.profile!.applications, office.applications);
     expect(controller.profile!.acceptRoutes, isFalse);
     expect(gateway.connectCalls, 0);
-    expect(await controller.forgetProfile(home.server), isTrue);
+    expect(await controller.forgetProfile(home.id), isTrue);
     expect(controller.profiles, hasLength(1));
     expect(gateway.receivedKey, isEmpty);
     controller.dispose();
@@ -203,27 +204,31 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('常用服务器页连接中禁用切换和添加', (tester) async {
+  testWidgets('账号页连接中切换需确认并先停止旧连接', (tester) async {
     final gateway = FakeGateway();
-    gateway.savedProfiles[gateway.profile.server] = gateway.profile;
+    gateway.savedProfiles[gateway.profile.id] = gateway.profile;
     const office = ClientProfile(
       server: 'https://office.example/',
       hostname: 'work',
+      id: 'office',
     );
-    gateway.savedProfiles[office.server] = office;
+    gateway.savedProfiles[office.id] = office;
     gateway.current = const VpnSnapshot(phase: ConnectionPhase.connected);
     final controller = AppController(gateway);
     await controller.initialize();
     await openPage(tester, ProfilesPage(controller: controller));
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.byKey(const Key('select-https://office.example/')),
-          )
-          .onPressed,
-      isNull,
-    );
+    final select = find.byKey(const Key('select-office'));
+    await tester.ensureVisible(select);
+    await tester.pumpAndSettle();
+    await tester.tap(select);
+    await tester.pumpAndSettle();
+    expect(find.text('断开并切换账号？'), findsOneWidget);
     expect(gateway.profileChanges, 0);
+    await tester.tap(find.text('切换账号'));
+    await tester.pumpAndSettle();
+    expect(controller.profile!.id, 'office');
+    expect(controller.snapshot.phase, ConnectionPhase.disconnected);
+    expect(gateway.connectCalls, 0);
     await tester.pumpWidget(const SizedBox());
     controller.dispose();
   });

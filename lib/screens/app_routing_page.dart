@@ -78,7 +78,7 @@ class _AppRoutingPageState extends State<AppRoutingPage> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      '只影响私有网络路由，日常上网和手机 DNS 不变。玄序自身始终通过底层网络连接。应用清单只在本机使用，不上传。',
+                      '决定哪些应用参与 VPN，包括已开启的 DNS 与出口路由。玄序自身始终通过底层网络连接。应用清单只在本机使用，不上传。',
                       style: TextStyle(color: Colors.blueGrey, height: 1.7),
                     ),
                     const SizedBox(height: 12),

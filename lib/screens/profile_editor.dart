@@ -7,10 +7,12 @@ class ProfileEditor extends StatefulWidget {
   const ProfileEditor({
     required this.controller,
     this.newServer = false,
+    this.initialServer = '',
     super.key,
   });
   final AppController controller;
   final bool newServer;
+  final String initialServer;
   @override
   State<ProfileEditor> createState() => _ProfileEditorState();
 }
@@ -18,10 +20,14 @@ class ProfileEditor extends StatefulWidget {
 class _ProfileEditorState extends State<ProfileEditor> {
   final _form = GlobalKey<FormState>();
   late final _base = widget.newServer
-      ? ClientProfile(server: '', hostname: widget.controller.profile!.hostname)
+      ? ClientProfile(
+          server: widget.initialServer,
+          hostname: widget.controller.profile!.hostname,
+        )
       : widget.controller.profile!;
   late final _server = TextEditingController(text: _base.server);
   late final _hostname = TextEditingController(text: _base.hostname);
+  late final _label = TextEditingController(text: _base.label);
   late bool _routes = _base.acceptRoutes;
   late bool _reconnect = _base.autoReconnect;
   bool _saving = false;
@@ -31,12 +37,13 @@ class _ProfileEditorState extends State<ProfileEditor> {
   void dispose() {
     _server.dispose();
     _hostname.dispose();
+    _label.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.newServer ? '添加服务器' : '网络设置')),
+    appBar: AppBar(title: Text(widget.newServer ? '添加账号 / 控制器' : '账号连接设置')),
     bottomNavigationBar: SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -58,7 +65,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
             ),
             const SizedBox(height: 10),
             const Text(
-              '只需服务器地址，不需要填写网络标识。登录后设备将加入你实际授权的账号。',
+              '同一控制器可以添加多个账号，每项独立授权并保存设备身份。备注仅供区分，不代表已登录的账号。',
               style: TextStyle(color: Colors.blueGrey, height: 1.6),
             ),
             const SizedBox(height: 24),
@@ -69,9 +76,23 @@ class _ProfileEditorState extends State<ProfileEditor> {
               keyboardType: TextInputType.url,
               autocorrect: false,
               enableSuggestions: false,
-              decoration: const InputDecoration(
+              readOnly: !widget.newServer && _base.id.isNotEmpty,
+              decoration: InputDecoration(
                 labelText: '服务器地址',
                 hintText: 'https://your-server.example.com',
+                helperText: !widget.newServer && _base.id.isNotEmpty
+                    ? '更换地址请在账号列表添加控制器，原身份不会被转移'
+                    : null,
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              key: const Key('profile-label-field'),
+              controller: _label,
+              maxLength: 48,
+              decoration: const InputDecoration(
+                labelText: '账号备注',
+                hintText: '例如：个人账号、公司账号',
               ),
             ),
             const SizedBox(height: 20),
@@ -103,7 +124,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
             ),
             const SizedBox(height: 16),
             const Text(
-              '本版本不接管默认出口，不更改手机 DNS。Android 作为子网访问端使用，不在手机上开启需要 root 的转发。',
+              '默认仅连接私有网络，DNS 与出口节点可在设置中单独开启。更换控制地址请新增配置，避免混用设备身份。',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.blueGrey,
@@ -133,6 +154,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
         hostname: _hostname.text.trim(),
         acceptRoutes: _routes,
         autoReconnect: _reconnect,
+        label: _label.text.trim(),
       ),
     );
     if (!mounted) return;

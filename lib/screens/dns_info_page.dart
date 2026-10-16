@@ -19,6 +19,28 @@ class DnsInfoPage extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            SwitchListTile(
+              key: const Key('magic-dns-switch'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('使用网络 DNS / MagicDNS'),
+              subtitle: Text(
+                controller.profile?.exitNodeId.isNotEmpty == true
+                    ? '使用出口节点时自动启用，避免 DNS 查询从本地网络泄露'
+                    : '在 VPN 内解析设备域名；普通域名使用网络配置的解析器',
+              ),
+              value:
+                  controller.profile?.acceptDns == true ||
+                  controller.profile?.exitNodeId.isNotEmpty == true,
+              onChanged:
+                  controller.busy ||
+                      controller.profile == null ||
+                      controller.profile!.exitNodeId.isNotEmpty
+                  ? null
+                  : (value) => controller.applyNetworkSettings(
+                      controller.profile!.copyWith(acceptDns: value),
+                    ),
+            ),
+            const SizedBox(height: 16),
             Card(
               child: ListTile(
                 leading: const Icon(Icons.dns_outlined),
@@ -33,16 +55,18 @@ class DnsInfoPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              '手机 DNS 保持不变',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            Text(
+              snapshot.dnsActive ? 'VPN DNS 已生效' : 'VPN DNS 尚未生效',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 10),
             const Text(
-              '此页展示服务器提供的设备域名与搜索域，不代表手机已启用系统级 MagicDNS 解析。本版不覆盖手机解析器，也不劫持 100.100.100.100；其他 App 请使用设备 IP 连接。',
+              '开启后，参与 VPN 的应用可按设备域名连接。解析地址与局域网冲突时自动退避，不抢占原有内网。切换设置会短暂重建连接；断开 VPN 后恢复原来的 DNS。Android 严格“私人 DNS”或应用自带 DoH 可能绕过此解析器。',
               style: TextStyle(color: Colors.blueGrey, height: 1.8),
             ),
             if (connected) ...[
+              if (snapshot.dnsAddress.isNotEmpty)
+                _copyable(context, snapshot.dnsAddress),
               if (snapshot.selfName.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 const Text('本机域名'),
@@ -71,6 +95,11 @@ class DnsInfoPage extends StatelessWidget {
                 label: const Text('前往用户中心管理 DNS'),
               ),
             ],
+            if (controller.error != null)
+              Text(
+                controller.error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
           ],
         );
       },

@@ -16,6 +16,7 @@ class UnderlayMonitor(context: Context, private val handler: Handler, private va
         val ipv4Addresses: List<String> = emptyList(),
         val label: String = "等待网络恢复",
         val available: Boolean = false,
+        val dnsServers: List<String> = emptyList(),
     )
     private data class Entry(var capabilities: NetworkCapabilities? = null, var properties: LinkProperties? = null)
     private val manager = context.getSystemService(ConnectivityManager::class.java)
@@ -98,7 +99,7 @@ class UnderlayMonitor(context: Context, private val handler: Handler, private va
             "${network.networkHandle}/${entry.properties?.interfaceName}/${entry.properties?.linkAddresses?.map { it.toString() }?.sorted()}"
         } + ":$local"
         val previous = snapshot
-        snapshot = Snapshot(fingerprint, local, addresses, label, usable.isNotEmpty())
+        snapshot = Snapshot(fingerprint, local, addresses, label, usable.isNotEmpty(), selected?.value?.properties?.dnsServers?.map(NetworkAddress::resolver) ?: emptyList())
         if (previous != snapshot) changed()
     }
 }
