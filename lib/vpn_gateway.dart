@@ -32,6 +32,7 @@ abstract class VpnGateway {
   Future<void> openAuthorization();
   Future<void> openConsole();
   Future<void> vpnSettings();
+  Future<void> networkSettings();
   Future<void> notificationSettings();
   Future<PingResult> ping(String peerId, {required int generation});
 }
@@ -102,6 +103,9 @@ class AndroidVpnGateway implements VpnGateway {
   Future<void> openConsole() => _channel.invokeMethod<void>('openConsole');
   @override
   Future<void> vpnSettings() => _channel.invokeMethod<void>('vpnSettings');
+  @override
+  Future<void> networkSettings() =>
+      _channel.invokeMethod<void>('networkSettings');
   @override
   Future<void> notificationSettings() =>
       _channel.invokeMethod<void>('notificationSettings');

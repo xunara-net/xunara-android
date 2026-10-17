@@ -6,6 +6,8 @@ core=${XUNARA_CLIENT_SOURCE:-$root/../xunara-client}
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}
 adb=$sdk/platform-tools/adb
 serial=${1:-emulator-5580}
+public_dns=${XUNARA_TEST_PUBLIC_DNS:-false}
+case "$public_dns" in true|false) :;; *) echo 'XUNARA_TEST_PUBLIC_DNS 只能为 true 或 false' >&2; exit 1;; esac
 case "$serial" in emulator-*) :;; *) echo '自动授权测试只允许专用模拟器，不能操作用户真机。' >&2; exit 1;; esac
 for program in flutter socat unshare nsenter curl ip jq node; do command -v "$program" >/dev/null || { echo "缺少 $program" >&2; exit 1; }; done
 if [ ! -x "$core/target/compat-fixture" ] || [ ! -x "$core/target/debug/xunara-client" ]; then
@@ -50,7 +52,7 @@ flutter build apk --debug --target integration_test/vpn_test.dart --target-platf
 # 密钥只从 stdin 写入测试应用私有缓存，既不出现在 argv，也不编译进 APK。
 "$adb" -s "$serial" shell "run-as net.xunara.android sh -c 'umask 077; cat > cache/integration-auth-key'" <"$directory/auth-key"
 "$adb" -s "$serial" shell "run-as net.xunara.android sh -c 'umask 077; cat > cache/integration-second-auth-key'" <"$directory/second-auth-key"
-flutter test integration_test/vpn_test.dart -d "$serial" --no-uninstall --timeout 10m >"$directory/integration.log" 2>&1 & integration=$!; pids="$pids $integration"
+flutter test integration_test/vpn_test.dart -d "$serial" --dart-define="XUNARA_TEST_PUBLIC_DNS=$public_dns" --no-uninstall --timeout 10m >"$directory/integration.log" 2>&1 & integration=$!; pids="$pids $integration"
 attempt=0
 until "$adb" -s "$serial" shell run-as net.xunara.android cat cache/integration-connected >"$directory/android-connected.json" 2>/dev/null; do
     attempt=$((attempt+1)); [ "$attempt" -lt 100 ] || { cat "$directory/integration.log"; exit 1; }
@@ -163,9 +165,12 @@ dns_ip=$("$adb" -s "$serial" shell run-as net.xunara.android cat cache/integrati
 grep -F "$router_ip" "$directory/magicdns-system.log" >/dev/null
 printf 'PASS Android 系统解析器通过 VPN MagicDNS 解析设备域名\n'
 dns_query() {
-    encoded=$(node -e 'const name=process.argv[1]; const labels=name.split(".").filter(Boolean).flatMap(label=>[Buffer.from([label.length]),Buffer.from(label)]); const query=Buffer.concat([Buffer.from("123401000001000000000000","hex"),...labels,Buffer.from([0,0,1,0,1])]); const prefix=Buffer.alloc(2); prefix.writeUInt16BE(query.length); process.stdout.write((process.argv[2]==="tcp"?Buffer.concat([prefix,query]):query).toString("base64"));' "$1" "$2")
+    encoded=$(node -e 'const name=process.argv[1]; const labels=name.split(".").filter(Boolean).flatMap(label=>[Buffer.from([label.length]),Buffer.from(label)]); const query=Buffer.concat([Buffer.from("123401000001000000000000","hex"),...labels,Buffer.from([0,0,1,0,1])]); if(process.argv[3]==="SECURE")query[3]|=0x20; const prefix=Buffer.alloc(2); prefix.writeUInt16BE(query.length); process.stdout.write((process.argv[2]==="tcp"?Buffer.concat([prefix,query]):query).toString("base64"));' "$1" "$2" "$3")
     case "$2" in udp) mode='-u';; tcp) mode='';; *) exit 1;; esac
-    "$adb" -s "$serial" shell "printf '%s' '$encoded' | base64 -d | nc $mode -w 3 -W 3 -q 3 '$dns_ip' 53" >"$directory/dns-$1-$2.bin"
+    deadline=${XUNARA_DNS_TIMEOUT:-3}
+    case "$deadline" in ''|*[!0-9]*) echo 'DNS 超时必须为整数' >&2; exit 1;; esac
+    [ "$deadline" -ge 1 ] && [ "$deadline" -le 30 ] || exit 1
+    "$adb" -s "$serial" shell "printf '%s' '$encoded' | base64 -d | nc $mode -w "$deadline" -W "$deadline" -q "$deadline" '$dns_ip' 53" >"$directory/dns-$1-$2.bin"
     node "$root/scripts/check-dns-response.cjs" "$directory/dns-$1-$2.bin" "$2" "$3"
 }
 dns_query rust-router.core.test udp "$router_ip"
@@ -175,6 +180,22 @@ dns_query external.public.test tcp 203.0.113.77
 dns_query missing.core.test udp NXDOMAIN
 printf 'PASS MagicDNS UDP/TCP、本地域 NXDOMAIN 与经 ACL 子网 DNS 转发\n'
 "$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-dns-verified
+if [ "$public_dns" = true ]; then
+    wait_marker doh-ready
+    dns_ip=$("$adb" -s "$serial" shell run-as net.xunara.android cat cache/integration-doh-ready | jq -r .dns)
+    XUNARA_DNS_TIMEOUT=12 dns_query cloudflare.com udp SECURE
+    XUNARA_DNS_TIMEOUT=12 dns_query dnssec-failed.org tcp SERVFAIL
+    "$adb" -s "$serial" shell ping -c 1 -W 4 rust-router.core.test >"$directory/doh-local-magicdns.log"
+    grep -F "$router_ip" "$directory/doh-local-magicdns.log" >/dev/null
+    printf 'PASS Android 受保护 socket 的真实 DoH、公网 DNSSEC 信任链、错误签名拒绝与 MagicDNS 保留\n'
+    "$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-doh-verified
+    wait_marker dot-ready
+    dns_ip=$("$adb" -s "$serial" shell run-as net.xunara.android cat cache/integration-dot-ready | jq -r .dns)
+    XUNARA_DNS_TIMEOUT=12 dns_query cloudflare.com udp SECURE
+    XUNARA_DNS_TIMEOUT=12 dns_query dnssec-failed.org tcp SERVFAIL
+    printf 'PASS Android 真实 DoT、完整 DNSSEC 信任链和错误签名拒绝，机器身份不变\n'
+    "$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-dot-verified
+fi
 wait_marker exit-ready
 dns_ip=$("$adb" -s "$serial" shell run-as net.xunara.android cat cache/integration-exit-ready | jq -r .dns)
 fetch 203.0.113.77 8088 >"$directory/exit-tcp.log"

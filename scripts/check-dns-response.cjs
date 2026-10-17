@@ -13,7 +13,10 @@ assert.ok(bytes[2] & 0x80, 'not a DNS response');
 const expected = process.argv[4];
 const codes = { NXDOMAIN: 3, SERVFAIL: 2 };
 assert.equal(bytes[3] & 15, codes[expected] ?? 0);
-if (!(expected in codes)) {
+if (expected === 'SECURE') {
+  assert.ok(bytes[3] & 0x20, 'local DNSSEC validation did not set AD');
+  assert.ok(bytes.readUInt16BE(6) > 0, 'validated DNS answer missing');
+} else if (!(expected in codes)) {
   assert.ok(bytes.readUInt16BE(6) > 0, 'DNS answer missing');
   const address = Buffer.from(expected.split('.').map(Number));
   assert.ok(bytes.includes(address), 'expected address missing');

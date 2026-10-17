@@ -56,6 +56,10 @@ void main() {
       'routing-restored-verified',
       'dns-ready',
       'dns-verified',
+      'doh-ready',
+      'doh-verified',
+      'dot-ready',
+      'dot-verified',
       'exit-ready',
       'exit-verified',
       'exit-revoked',
@@ -295,6 +299,46 @@ void main() {
       await File('$cache/integration-dns-ready')
           .writeAsString(jsonEncode({'dns': dns.dnsAddress}));
       await waitForMarker('dns-verified');
+      if (const bool.fromEnvironment('XUNARA_TEST_PUBLIC_DNS')) {
+        await gateway.disconnect();
+        await waitFor(gateway, ConnectionPhase.disconnected);
+        await gateway.saveProfile(
+          testProfile.copyWith(
+            acceptDns: true,
+            dnsResolver: 'https://cloudflare-dns.com/dns-query',
+            dnsBootstrap: ['1.1.1.1'],
+            validateDnssec: true,
+          ),
+        );
+        await gateway.connect();
+        final encryptedDns = await waitFor(gateway, ConnectionPhase.connected);
+        expect(encryptedDns.dnsActive, isTrue);
+        expect(encryptedDns.dnssecActive, isTrue);
+        expect(encryptedDns.addresses, connected.addresses);
+        final savedDns = (await gateway.bootstrap()).profile;
+        expect(savedDns.dnsResolver, 'https://cloudflare-dns.com/dns-query');
+        expect(savedDns.validateDnssec, isTrue);
+        await File('$cache/integration-doh-ready')
+            .writeAsString(jsonEncode({'dns': encryptedDns.dnsAddress}));
+        await waitForMarker('doh-verified');
+        await gateway.disconnect();
+        await waitFor(gateway, ConnectionPhase.disconnected);
+        await gateway.saveProfile(
+          testProfile.copyWith(
+            acceptDns: true,
+            dnsResolver: 'tls://one.one.one.one',
+            dnsBootstrap: ['1.1.1.1'],
+            validateDnssec: true,
+          ),
+        );
+        await gateway.connect();
+        final dot = await waitFor(gateway, ConnectionPhase.connected);
+        expect(dot.dnssecActive, isTrue);
+        expect(dot.addresses, connected.addresses);
+        await File('$cache/integration-dot-ready')
+            .writeAsString(jsonEncode({'dns': dot.dnsAddress}));
+        await waitForMarker('dot-verified');
+      }
       final exit = dns.devices.firstWhere(
         (device) => device.exitNode && device.name.startsWith('official-exit.'),
       );

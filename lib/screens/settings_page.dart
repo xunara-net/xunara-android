@@ -198,7 +198,7 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Android 预览版 0.3.1 · Rust ${controller.coreVersion}',
+                'Android 预览版 0.4.0 · Rust ${controller.coreVersion}',
                 style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
               ),
             ],
@@ -209,7 +209,7 @@ class SettingsPage extends StatelessWidget {
         onPressed: () => showLicensePage(
           context: context,
           applicationName: '玄序 Xunara',
-          applicationVersion: '0.3.1 预览版',
+          applicationVersion: '0.4.0 预览版',
         ),
         icon: const Icon(Icons.description_outlined, size: 18),
         label: const Text('开源组件声明'),
@@ -224,7 +224,7 @@ class SettingsPage extends StatelessWidget {
         ),
       const SizedBox(height: 24),
       const Text(
-        '支持 Android 8.0 及以上 · ARM64 / x86_64\n支持可选 MagicDNS 与出口访问；手机不充当子网或出口路由器。\n网络切换后默认安全重连；主动断开不会自动连接。',
+        '支持 Android 8.0 及以上 · ARM64 / x86_64\n支持 MagicDNS、DoH / DoT、DNSSEC 与出口访问；手机转发和完整 Tailnet Lock 尚在开发。\n网络切换后默认安全重连；主动断开不会自动连接。',
         textAlign: TextAlign.center,
         style: TextStyle(fontSize: 12, color: Colors.blueGrey, height: 1.8),
       ),

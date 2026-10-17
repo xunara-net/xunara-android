@@ -103,6 +103,13 @@ class _SystemDiagnosticsPageState extends State<SystemDiagnosticsPage>
                     ),
                     const Divider(height: 1),
                     _entry(
+                      Icons.dns_outlined,
+                      '系统私人 DNS',
+                      diagnostics.privateDnsDescription,
+                      widget.controller.gateway.networkSettings,
+                    ),
+                    const Divider(height: 1),
+                    _entry(
                       Icons.notifications_outlined,
                       '连接状态通知',
                       diagnostics.notificationsEnabled

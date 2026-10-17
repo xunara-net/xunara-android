@@ -99,6 +99,7 @@ class MainActivity : FlutterActivity() {
                     }
                     "openConsole" -> { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentProfile().server + "dashboard"))); result.success(null) }
                     "vpnSettings" -> { startActivity(Intent(Settings.ACTION_VPN_SETTINGS)); result.success(null) }
+                    "networkSettings" -> { startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS)); result.success(null) }
                     "notificationSettings" -> {
                         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4002)

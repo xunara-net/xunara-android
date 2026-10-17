@@ -27,6 +27,8 @@ class SystemDiagnostics {
     required this.notificationsEnabled,
     required this.batteryUnrestricted,
     required this.backgroundRestricted,
+    this.privateDnsActive,
+    this.privateDnsStrict,
   });
   factory SystemDiagnostics.fromJson(Map<String, dynamic> json) =>
       SystemDiagnostics(
@@ -38,6 +40,8 @@ class SystemDiagnostics {
         notificationsEnabled: json['notifications_enabled'] as bool,
         batteryUnrestricted: json['battery_unrestricted'] as bool,
         backgroundRestricted: json['background_restricted'] as bool,
+        privateDnsActive: json['private_dns_active'] as bool?,
+        privateDnsStrict: json['private_dns_strict'] as bool?,
       );
   final int androidSdk;
   final String androidVersion;
@@ -47,6 +51,16 @@ class SystemDiagnostics {
   final bool notificationsEnabled;
   final bool batteryUnrestricted;
   final bool backgroundRestricted;
+  final bool? privateDnsActive;
+  final bool? privateDnsStrict;
+
+  String get privateDnsDescription => privateDnsStrict == true
+      ? '严格私人 DNS 可能绕过网络 DNS；请到系统网络设置检查'
+      : privateDnsActive == true
+      ? '系统加密 DNS 已启用，应用自带 DoH 仍需在应用内设置'
+      : privateDnsActive == false
+      ? '当前未检测到系统私人 DNS；不代表应用自带 DoH 已关闭'
+      : '系统未提供私人 DNS 状态，请手动检查';
 
   String report(VpnSnapshot snapshot, ClientProfile profile) => [
     '玄序 Android 连接诊断',
@@ -58,6 +72,7 @@ class SystemDiagnostics {
     '状态通知：${notificationsEnabled ? '已开启' : '未开启'}',
     '电池优化：${batteryUnrestricted ? '不受优化限制' : '由系统管理'}',
     '后台限制：${backgroundRestricted ? '受限制' : '未限制'}',
+    '私人 DNS：$privateDnsDescription',
     '应用分流：${profile.appRouting.label} · 已选择 ${profile.applications.length} 个',
     '远程子网：${profile.acceptRoutes ? '接收已批准路由' : '关闭'}',
     '切网重连：${profile.autoReconnect ? '开启' : '关闭'}',

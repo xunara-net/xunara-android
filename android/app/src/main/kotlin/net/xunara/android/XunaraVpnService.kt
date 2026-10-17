@@ -70,6 +70,9 @@ class XunaraVpnService : VpnService() {
         directory.mkdirs()
         Os.chmod(directory.absolutePath, 448)
         configuration = JSONObject().put("server", profile.server).put("hostname", profile.hostname)
+            .put("dns_resolvers", JSONArray().apply {
+                if (profile.acceptDns && profile.dns.resolver.isNotEmpty()) put(JSONObject().put("Addr", profile.dns.resolver).put("BootstrapResolution", JSONArray(profile.dns.bootstrap)))
+            }).put("dnssec_validate", (profile.acceptDns || profile.exitNodeId.isNotEmpty()) && profile.dns.validateDnssec)
             .put("accept_routes", profile.acceptRoutes).put("state_dir", directory.absolutePath)
             .put("accept_dns", profile.acceptDns).put("exit_node_id", profile.exitNodeId)
             .put("interface", "xunara0").put("listen", "0.0.0.0:0").toString()

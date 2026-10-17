@@ -45,6 +45,9 @@ class ClientProfile {
     this.acceptDns = false,
     this.exitNodeId = '',
     this.exitNodeName = '',
+    this.dnsResolver = '',
+    this.dnsBootstrap = const [],
+    this.validateDnssec = false,
   });
   factory ClientProfile.fromJson(Map<String, dynamic> json) => ClientProfile(
     server: json['server'] as String? ?? '',
@@ -58,6 +61,9 @@ class ClientProfile {
     acceptDns: json['accept_dns'] as bool? ?? false,
     exitNodeId: json['exit_node_id'] as String? ?? '',
     exitNodeName: json['exit_node_name'] as String? ?? '',
+    dnsResolver: json['dns_resolver'] as String? ?? '',
+    dnsBootstrap: (json['dns_bootstrap'] as List? ?? []).cast<String>(),
+    validateDnssec: json['dnssec_validate'] as bool? ?? false,
   );
 
   final String server;
@@ -71,6 +77,9 @@ class ClientProfile {
   final bool acceptDns;
   final String exitNodeId;
   final String exitNodeName;
+  final String dnsResolver;
+  final List<String> dnsBootstrap;
+  final bool validateDnssec;
   String get displayLabel => label.isEmpty ? displayServer : label;
   String get displayServer => Uri.tryParse(server)?.authority ?? server;
   Map<String, dynamic> toJson() => {
@@ -85,6 +94,9 @@ class ClientProfile {
     'accept_dns': acceptDns,
     'exit_node_id': exitNodeId,
     'exit_node_name': exitNodeName,
+    'dns_resolver': dnsResolver,
+    'dns_bootstrap': dnsBootstrap,
+    'dnssec_validate': validateDnssec,
   };
 
   ClientProfile copyWith({
@@ -99,6 +111,9 @@ class ClientProfile {
     bool? acceptDns,
     String? exitNodeId,
     String? exitNodeName,
+    String? dnsResolver,
+    List<String>? dnsBootstrap,
+    bool? validateDnssec,
   }) => ClientProfile(
     server: server ?? this.server,
     hostname: hostname ?? this.hostname,
@@ -111,6 +126,9 @@ class ClientProfile {
     acceptDns: acceptDns ?? this.acceptDns,
     exitNodeId: exitNodeId ?? this.exitNodeId,
     exitNodeName: exitNodeName ?? this.exitNodeName,
+    dnsResolver: dnsResolver ?? this.dnsResolver,
+    dnsBootstrap: dnsBootstrap ?? this.dnsBootstrap,
+    validateDnssec: validateDnssec ?? this.validateDnssec,
   );
 
   static String? validateServer(String? raw) {
@@ -228,6 +246,7 @@ class VpnSnapshot {
     this.searchDomains = const [],
     this.dnsActive = false,
     this.dnsAddress = '',
+    this.dnssecActive = false,
     this.exitNodeAvailable = false,
     this.ownerLogin = '',
   });
@@ -265,6 +284,7 @@ class VpnSnapshot {
       searchDomains: (dns['domains'] as List? ?? []).cast<String>(),
       dnsActive: dns['active'] as bool? ?? false,
       dnsAddress: dns['address'] as String? ?? '',
+      dnssecActive: dns['dnssec_validate'] as bool? ?? false,
       exitNodeAvailable: exit['available'] as bool? ?? false,
       ownerLogin: status['owner_login'] as String? ?? '',
     );
@@ -287,6 +307,7 @@ class VpnSnapshot {
   final List<String> searchDomains;
   final bool dnsActive;
   final String dnsAddress;
+  final bool dnssecActive;
   final bool exitNodeAvailable;
   final String ownerLogin;
 }

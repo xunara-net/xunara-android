@@ -210,4 +210,46 @@ ARM64 / x86_64 Release 包实际 versionCode 为 2003 / 4003，versionName 为 0
 
 ARM64 物理手机、各厂商后台和物理移动网络仍需真机验收，不用 x86_64 模拟器结果冒充。
 
-仍需单独验收：ARM64 真机、厂商省电 / 长时间后台、真实蜂窝漫游、Android UDP 直连、严格私人 DNS / 应用 DoH 与长期正式签名。本轮没有实现共享 masquerade、Tailnet Lock 或手机子网 / 出口转发。自定义 DoH / DoT 解析器和 DNSSEC 验证也不在支持范围内。
+## 0.4.0：加密 DNS / 本地 DNSSEC / 共享地址转换
+
+### What changed
+
+- DNS 页右上角进入独立的解析器编辑页，支持 IP、DoH、DoT、最多四个引导 IP 与本机 DNSSEC。保存按钮固定在底部，旧账号编辑页不能覆盖切换后的账号。
+- Rust 内核固定 `48a4abc7d3f32e140115c079183d6c2ab004a0f8`，本地验证完整 DNSSEC 信任链；原始 AD 被清除，只有本地验证成功且查询设置 DO / AD 才置位。未请求 DNSSEC 时移除未显式查询的签名记录，兼容普通手机解析器。MagicDNS 的本地记录不冒充 DNSSEC 签名。
+- DNS / DNSSEC 设置按账号保存，默认保持关闭。设置在网络 DNS 关闭时保留但不启用；出口模式仍使用所选出口的 peerapi，绝不因自定义解析器绕回手机原网络。
+- 系统诊断增加私人 DNS 的开启 / 严格状态，未知明确显示未知，不导出提供商名称；可由用户打开系统网络设置，不越权更改系统开关。
+- 内核按认证 peer 的共享别名转换源 / 目的地址及双栈校验和，不合并机器身份，也不跳过来源 / ACL 检查。
+
+### Why
+
+不能把解析器 URL 只存到界面，不能把上游 AD 当成本机验证，不能让同一控制器的不同账号共享私钥。手机上的高级设置应是独立可收纳页面，而不是把连接首页继续加长。
+
+### Compatibility impact
+
+- 无服务端迁移、新端点或协议分叉；保留旧 catalog_v2 和身份目录，新增字段默认空 / false。
+- 版本 `0.4.0+6`，两个 ABI 的基础版本递增；正式包继续沿用上一公开预览的本地测试签名。
+- DNSConfig / BootstrapResolution 和 SelfNodeV4/V6MasqAddrForThisPeer 按上游语义消费。Linux 不接管宿主 DNS / 默认路由。
+- 完整 Tailnet Lock 未完成，启用时明确拒绝不具备本机签名链验证的连接，不冒充已支持。
+
+### Security impact
+
+- 所有物理 DNS socket 仍 protect；TLS 校验 CA / 主机名，没有测试 CA 或接受任意证书的生产开关。加密或签名失败返回失败，不降级明文；DNSSEC 子查询也使用原来的 DNS / 出口路由。
+- 凭据 / query / fragment 不进入解析器 URL；DNS 设置解析不发起系统 DNS，非法地址错误不回显原始输入。脱敏诊断不包含自定义解析器 URL、IP 或查询域名。
+- Android 私人 DNS 和任意第三方 HTTPS DoH 无法在不破解证书的前提下透明强制改写。这里提供检测与用户设置引导，不使用中间人证书、不伪报已全局接管。
+
+### Tests
+
+- Dart 38 项测试、analyze；Kotlin 23 项测试、Debug lint；JNI 生命周期 3 项及 APK 契约检查器 5 项通过。
+- Rust 36 项单测、fmt / clippy；另外实际运行公共 DoH 验证签名记录、签名 NXDOMAIN、错误签名域名拒绝及普通解析器响应兼容。官方 Go 对照 STUN 与双栈 TCP / UDP / ICMP 地址改写通过。
+- Linux 真实 namespace 的普通与 SNAT 模式通过，包括官方 tsnet 双向、独立子网、ACL、阻断 UDP 后 DERP 回退、恢复和 NAT 清理。
+- `XUNARA_TEST_PUBLIC_DNS=true scripts/test-android-vpn.sh` 在 Android 36 x86_64 完整通过：真实 TUN、普通 UID 流量、MagicDNS、真实 DoH / DoT 与 DNSSEC 正反例、切网、应用分流、官方出口撤销后公网 / DNS 不回退、同控制器账号隔离和原身份恢复。
+- 两个 ABI 的最终 Release 均保留 6 个 JNI 回调，签名 / 16 KiB 对齐 / 不可调试检查通过，versionCode 为 `2006 / 4006`。实际安装的 x86_64 APK SHA256 与待发布文件一致，同身份接入隔离服务；普通 UID 的双栈 TCP、MagicDNS、DoH、DNSSEC 签名正例、签名 NXDOMAIN、伪签名失败及 DO / AD 响应兼容通过。新增截图来自该 Release。
+- 核心 AMD64 / ARM64 musl 构建通过；两者均没有外部 INTERP / NEEDED，AMD64 实际运行版本命令通过。没有把 Linux 二进制当作 Android 程序。
+
+### 尚未完成
+
+- 手机作为子网 / 出口路由器：默认按免 Root 用户态转发推进，需要 TCP / UDP / ICMP 数据面、批准路由交集、ACL 更新时关闭旧流、出口 peerapi DNS 和远端官方客户端的专项验收；不是只广播路由。
+- 完整 Tailnet Lock：本机密钥 / 信任根、AUM 验证和同步、节点签名、轮换、撤销、带证明的禁用，以及持久化 / 损坏恢复均须完成，不先挂无效开关。
+- 共享 masquerade 已接入内核与协议对照，跨租户共享的专项端到端验收仍未完成；ARM64 真机和厂商后台仍需实测。
+
+仍需单独验收：ARM64 真机、厂商省电 / 长时间后台、真实蜂窝漫游、Android UDP 直连、严格私人 DNS / 应用 DoH 与长期正式签名。完整 Tailnet Lock、手机子网 / 出口转发和跨租户共享专项验收尚未完成；DoH / DoT、本机 DNSSEC 与 peer 专属共享地址转换已按上述范围实现。

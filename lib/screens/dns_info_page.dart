@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../app_controller.dart';
 import '../models.dart';
+import 'dns_resolver_page.dart';
+import 'system_diagnostics_page.dart';
 
 class DnsInfoPage extends StatelessWidget {
   const DnsInfoPage({required this.controller, super.key});
@@ -10,7 +12,23 @@ class DnsInfoPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('设备域名与 DNS')),
+    appBar: AppBar(
+      title: const Text('设备域名与 DNS'),
+      actions: [
+        IconButton(
+          tooltip: '解析器与 DNSSEC',
+          icon: const Icon(Icons.tune_rounded),
+          onPressed: controller.profile == null
+              ? null
+              : () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => DnsResolverPage(controller: controller),
+                  ),
+                ),
+        ),
+      ],
+    ),
     body: ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
@@ -64,6 +82,11 @@ class DnsInfoPage extends StatelessWidget {
               '开启后，参与 VPN 的应用可按设备域名连接。解析地址与局域网冲突时自动退避，不抢占原有内网。切换设置会短暂重建连接；断开 VPN 后恢复原来的 DNS。Android 严格“私人 DNS”或应用自带 DoH 可能绕过此解析器。',
               style: TextStyle(color: Colors.blueGrey, height: 1.8),
             ),
+            if (snapshot.dnssecActive)
+              const Padding(
+                padding: EdgeInsets.only(top: 16),
+                child: Text('本机 DNSSEC 验证已启用：此状态不代表所有域名都已签名。'),
+              ),
             if (connected) ...[
               if (snapshot.dnsAddress.isNotEmpty)
                 _copyable(context, snapshot.dnsAddress),
@@ -95,6 +118,16 @@ class DnsInfoPage extends StatelessWidget {
                 label: const Text('前往用户中心管理 DNS'),
               ),
             ],
+            TextButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => SystemDiagnosticsPage(controller: controller),
+                ),
+              ),
+              icon: const Icon(Icons.health_and_safety_outlined),
+              label: const Text('检查系统私人 DNS'),
+            ),
             if (controller.error != null)
               Text(
                 controller.error!,

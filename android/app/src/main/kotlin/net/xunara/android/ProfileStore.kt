@@ -61,14 +61,18 @@ class ProfileStore(context: Context) {
     companion object {
         fun fromJson(json: JSONObject): Profile {
             val packages = json.optJSONArray("applications") ?: JSONArray()
+            val bootstrap = json.optJSONArray("dns_bootstrap") ?: JSONArray()
+            require(bootstrap.length() <= 4) { "最多四个 DNS 引导地址" }
             require(packages.length() <= 256) { "应用清单过大" }
             return Profile(json.getString("server"), json.getString("hostname"), json.optBoolean("accept_routes", true),
                 json.optBoolean("auto_reconnect", true), AppRouting(AppRoutingMode.parse(json.optString("app_routing", "all")),
                     (0 until packages.length()).map { packages.getString(it) }), json.optString("id", ""), json.optString("label", ""),
-                json.optBoolean("accept_dns", false), json.optString("exit_node_id", ""), json.optString("exit_node_name", "")).validated()
+                json.optBoolean("accept_dns", false), json.optString("exit_node_id", ""), json.optString("exit_node_name", ""),
+                DnsPreferences(json.optString("dns_resolver", ""), (0 until bootstrap.length()).map { bootstrap.getString(it) }, json.optBoolean("dnssec_validate", false))).validated()
         }
 
         fun toJson(profile: Profile): JSONObject = JSONObject().put("server", profile.server).put("hostname", profile.hostname)
+            .put("dns_resolver", profile.dns.resolver).put("dns_bootstrap", JSONArray(profile.dns.bootstrap)).put("dnssec_validate", profile.dns.validateDnssec)
             .put("accept_routes", profile.acceptRoutes).put("auto_reconnect", profile.autoReconnect)
             .put("app_routing", profile.appRouting.mode.value).put("applications", JSONArray(profile.appRouting.packages))
             .put("id", profile.id).put("label", profile.label).put("accept_dns", profile.acceptDns)

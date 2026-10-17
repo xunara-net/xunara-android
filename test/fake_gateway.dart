@@ -121,6 +121,8 @@ class FakeGateway implements VpnGateway {
   @override
   Future<void> vpnSettings() async {}
   @override
+  Future<void> networkSettings() async {}
+  @override
   Future<void> notificationSettings() async {}
   @override
   Future<PingResult> ping(String peerId, {required int generation}) async {

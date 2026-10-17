@@ -19,6 +19,7 @@
 <p>
   <img src="docs/screenshots/dns.png" width="240" alt="网络 DNS 与 MagicDNS" />
   <img src="docs/screenshots/exit-node.png" width="240" alt="出口节点" />
+  <img src="docs/screenshots/encrypted-dns.png" width="240" alt="加密 DNS 与本地 DNSSEC" />
 </p>
 
 截图来自实际 Release APK 的 Android 模拟器，不含伪造设备或连接数据。
@@ -35,6 +36,8 @@
 - 私有且禁止备份的机器身份，按账号配置隔离持久化；同一控制器多账号也不复用设备私钥。
 - Wi-Fi / 移动网络切换、断网恢复后自动重连：先退出旧 TUN，再重新检查 LAN / DNS 冲突，沿用机器身份、不保存或重放接入密钥。主动断开会取消待重连任务；可在网络设置关闭自动重连。
 - 可选 VPN DNS：MagicDNS A/AAAA/PTR、额外 IP 记录、搜索域、分流与全局 IP 解析器；DNS 地址冲突自动退避，支持 UDP / TCP 查询。
+- DNS 页右上角可配置 DoH / DoT、引导 IP 与本机 DNSSEC 验证；保留 MagicDNS / 分流，签名或加密失败不回退明文。系统诊断新增私人 DNS 状态与系统网络设置入口。
+- 内核按服务端提供的 peer 专属地址提示完成共享 masquerade，保留租户隔离与 ACL；不把共享变成全局设备管理。
 - 可选择已批准的出口节点，转发 IPv4 / IPv6 公网流量并通过该出口的 peerapi 加密解析 DNS。出口撤销时保留 VPN 内的阻断，不自动直连或切换其他出口。
 - 账号与控制器列表：每项保留设备名、DNS、出口、重连和应用分流偏好。切换先结束旧连接，不自动接入；移除记录不撤销服务器设备。
 - 应用分流支持全部应用、排除所选、仅所选三种模式，对私网、已开启的 DNS / 出口均生效。仅所选清单全部卸载时拒绝建立 VPN，不回退成全部应用。
@@ -52,6 +55,7 @@
 7. 在「设置 → 应用分流」选择能访问私网的应用，保存后再连接。只显示当前 Android 用户可启动及先前已选择的应用；不申请读取全部软件包的权限。Android 按 UID 分流，共享 UID 的应用可能一起生效。
 8. 后台或通知异常时打开「系统与连接诊断」。系统开关正常不代表业务可达，需到设备详情发送实际加密探测。
 9. 使用设备域名：先在用户中心启用本网络的 MagicDNS，再在 App「设备域名与 DNS」开启网络 DNS。想通过其他设备上网：先连接获取列表，再在「出口节点」选择；调整会短暂重建连接，不再次保存或索取接入密钥。
+10. 加密解析：在「设备域名与 DNS」右上角打开「解析器与 DNSSEC」，填写 DoH / DoT 和引导 IP，可单独开启本机 DNSSEC 验证。使用出口时仍由出口解析；严格私人 DNS 可到「系统与连接诊断」检查。
 
 账号登录不改变已登记机器的归属，不能靠切换浏览器账号接管另一用户的设备。添加账号配置会创建新设备；切回原配置继续使用原身份。请勿清除应用数据来代替服务端撤销设备。
 
@@ -59,8 +63,9 @@ Android 同时只能运行一个 VPN。网络环境改变时，默认安全退�
 
 ## 当前边界
 
-- 暂不支持共享地址 masquerade、Tailnet Lock、文件传输和自动升级。手机不能充当出口或子网路由器。
-- DNS 上游支持 IP / IP:端口：普通网络 UDP 优先、截断或不可用再回退 TCP；组网内解析器使用 TCP，出口使用官方 peerapi HTTP-over-WireGuard。自定义 DoH / DoT 上游、DNSSEC 验证、Android 严格私人 DNS 和应用自带 DoH 不在本次保证范围内。
+- 手机作为出口 / 子网路由器、完整 Tailnet Lock、文件传输和自动升级尚未完成；不会放一个无效开关冒充支持。Tailnet Lock 启用时明确拒绝未实现的本机签名链验证。
+- DNS 支持 IP / IP:端口、HTTPS DoH、TLS DoT 和本地 DNSSEC。域名形式的加密解析器须配置引导 IP；HTTPS 不接受 URL 凭据、query、重定向或分块响应。出口模式固定使用出口 peerapi，不把自定义解析器偷偷发到手机原网络。
+- DNSSEC 不照抄上游 AD，MagicDNS 本地记录不冒充签名；非公开分流区可能无法验证。系统私人 DNS 提供检测 / 设置引导，第三方应用任意 HTTPS DoH 不能在不破解证书的前提下透明强制改写；不会通过中间人证书绕过应用安全。
 - 出口模式保留 LAN 且强制 VPN DNS；所选出口失效时不回退。主动断开、系统停止 / 撤销 VPN 或进程退出后，Android 会恢复普通网络；这不是跨进程退出仍生效的锁定模式。玄序自身与被排除的应用不走出口。
 - 手机仅作子网**访问端**，不要求 root、不在 Android 上广播子网或开启内核转发。
 - 外层 UDP 目前使用 IPv4；隧道可传 IPv4 / IPv6 的 TCP、UDP、ICMP，不支持 IP 分片或 IPv6 扩展头。最多 256 个可见节点。
@@ -116,6 +121,8 @@ node scripts/check-jni-contract.cjs build/app/outputs/flutter-apk/app-x86_64-rel
 (cd ../xunara-client/tests/compat && go build -race -o ../../target/compat-fixture .)
 sh scripts/test-android-vpn.sh emulator-5580
 ```
+
+具备公网 443 / 853 连通条件时，可用 `XUNARA_TEST_PUBLIC_DNS=true sh scripts/test-android-vpn.sh emulator-5580` 验收手机真实 DoH / DoT、DNSSEC 签名链与错误签名拒绝；默认隔离测试不依赖公网 DNS。完整跨租户共享仍需专项端到端验收，不能把校验和协议对照或普通组网回归冒充为共享验收。
 
 需先启动专用 Android 模拟器，并安装 `socat`、`jq`、`iproute2`；宿主机允许 rootless user / network namespace。测试只允许 `emulator-*`，不自动给真机授权。测试服务运行在隔离 namespace，宿主代理只监听 127.0.0.1，Auth Key 通过 stdin 写入应用私有缓存，不出现在 argv、URL 或 APK 中，不访问生产账号。
 
