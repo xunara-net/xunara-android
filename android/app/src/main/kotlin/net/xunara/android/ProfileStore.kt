@@ -62,16 +62,20 @@ class ProfileStore(context: Context) {
         fun fromJson(json: JSONObject): Profile {
             val packages = json.optJSONArray("applications") ?: JSONArray()
             val bootstrap = json.optJSONArray("dns_bootstrap") ?: JSONArray()
+            val subnets = json.optJSONArray("advertise_routes") ?: JSONArray()
+            require(subnets.length() <= 64) { "最多 64 个转发子网" }
             require(bootstrap.length() <= 4) { "最多四个 DNS 引导地址" }
             require(packages.length() <= 256) { "应用清单过大" }
             return Profile(json.getString("server"), json.getString("hostname"), json.optBoolean("accept_routes", true),
                 json.optBoolean("auto_reconnect", true), AppRouting(AppRoutingMode.parse(json.optString("app_routing", "all")),
                     (0 until packages.length()).map { packages.getString(it) }), json.optString("id", ""), json.optString("label", ""),
                 json.optBoolean("accept_dns", false), json.optString("exit_node_id", ""), json.optString("exit_node_name", ""),
-                DnsPreferences(json.optString("dns_resolver", ""), (0 until bootstrap.length()).map { bootstrap.getString(it) }, json.optBoolean("dnssec_validate", false))).validated()
+                DnsPreferences(json.optString("dns_resolver", ""), (0 until bootstrap.length()).map { bootstrap.getString(it) }, json.optBoolean("dnssec_validate", false)),
+                ForwardingPreferences((0 until subnets.length()).map { subnets.getString(it) }, json.optBoolean("advertise_exit", false))).validated()
         }
 
         fun toJson(profile: Profile): JSONObject = JSONObject().put("server", profile.server).put("hostname", profile.hostname)
+            .put("advertise_routes", JSONArray(profile.forwarding.subnets)).put("advertise_exit", profile.forwarding.advertiseExit)
             .put("dns_resolver", profile.dns.resolver).put("dns_bootstrap", JSONArray(profile.dns.bootstrap)).put("dnssec_validate", profile.dns.validateDnssec)
             .put("accept_routes", profile.acceptRoutes).put("auto_reconnect", profile.autoReconnect)
             .put("app_routing", profile.appRouting.mode.value).put("applications", JSONArray(profile.appRouting.packages))

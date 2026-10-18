@@ -7,6 +7,7 @@ import 'profiles_page.dart';
 import 'app_routing_page.dart';
 import 'system_diagnostics_page.dart';
 import 'exit_node_page.dart';
+import 'forwarding_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({required this.controller, super.key});
@@ -124,6 +125,19 @@ class SettingsPage extends StatelessWidget {
             ),
             const Divider(height: 1, indent: 56),
             ListTile(
+              leading: const Icon(Icons.router_outlined),
+              title: const Text('共享本机网络'),
+              subtitle: const Text('转发局域网 / 提供出口 · 免 Root'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => ForwardingPage(controller: controller),
+                ),
+              ),
+            ),
+            const Divider(height: 1, indent: 56),
+            ListTile(
               leading: const Icon(Icons.public_rounded),
               title: const Text('出口节点'),
               subtitle: Text(
@@ -198,7 +212,7 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Android 预览版 0.4.0 · Rust ${controller.coreVersion}',
+                'Android 预览版 0.5.0 · Rust ${controller.coreVersion}',
                 style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
               ),
             ],
@@ -209,7 +223,7 @@ class SettingsPage extends StatelessWidget {
         onPressed: () => showLicensePage(
           context: context,
           applicationName: '玄序 Xunara',
-          applicationVersion: '0.4.0 预览版',
+          applicationVersion: '0.5.0 预览版',
         ),
         icon: const Icon(Icons.description_outlined, size: 18),
         label: const Text('开源组件声明'),
@@ -224,7 +238,7 @@ class SettingsPage extends StatelessWidget {
         ),
       const SizedBox(height: 24),
       const Text(
-        '支持 Android 8.0 及以上 · ARM64 / x86_64\n支持 MagicDNS、DoH / DoT、DNSSEC 与出口访问；手机转发和完整 Tailnet Lock 尚在开发。\n网络切换后默认安全重连；主动断开不会自动连接。',
+        '支持 Android 8.0 及以上 · ARM64 / x86_64\n支持 MagicDNS、加密 DNS、DNSSEC、跨网络共享和免 Root 子网 / 出口转发；完整 Tailnet Lock 尚未完成。\n网络切换后默认安全重连；主动断开不会自动连接。',
         textAlign: TextAlign.center,
         style: TextStyle(fontSize: 12, color: Colors.blueGrey, height: 1.8),
       ),

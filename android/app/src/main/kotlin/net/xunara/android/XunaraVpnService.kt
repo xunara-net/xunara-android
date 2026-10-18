@@ -70,9 +70,10 @@ class XunaraVpnService : VpnService() {
         directory.mkdirs()
         Os.chmod(directory.absolutePath, 448)
         configuration = JSONObject().put("server", profile.server).put("hostname", profile.hostname)
+            .put("advertise_routes", JSONArray(profile.forwarding.subnets)).put("advertise_exit", profile.forwarding.advertiseExit)
             .put("dns_resolvers", JSONArray().apply {
-                if (profile.acceptDns && profile.dns.resolver.isNotEmpty()) put(JSONObject().put("Addr", profile.dns.resolver).put("BootstrapResolution", JSONArray(profile.dns.bootstrap)))
-            }).put("dnssec_validate", (profile.acceptDns || profile.exitNodeId.isNotEmpty()) && profile.dns.validateDnssec)
+                if ((profile.acceptDns || profile.forwarding.advertiseExit) && profile.dns.resolver.isNotEmpty()) put(JSONObject().put("Addr", profile.dns.resolver).put("BootstrapResolution", JSONArray(profile.dns.bootstrap)))
+            }).put("dnssec_validate", (profile.acceptDns || profile.exitNodeId.isNotEmpty() || profile.forwarding.advertiseExit) && profile.dns.validateDnssec)
             .put("accept_routes", profile.acceptRoutes).put("state_dir", directory.absolutePath)
             .put("accept_dns", profile.acceptDns).put("exit_node_id", profile.exitNodeId)
             .put("interface", "xunara0").put("listen", "0.0.0.0:0").toString()
@@ -174,8 +175,15 @@ class XunaraVpnService : VpnService() {
         if (closing) return
         val event = JSONObject(raw)
         VpnState.update(event)
+        val requested = JSONObject(configuration)
+        val status = JSONObject(VpnState.snapshot()).optJSONObject("status")
         val text = when (VpnState.phase()) {
-            "connected" -> if (JSONObject(configuration).optString("exit_node_id").isEmpty()) "已连接 · 私有网络" else "已连接 · 已选择出口节点，请留意出口状态"
+            "connected" -> when {
+                requested.optString("exit_node_id").isNotEmpty() -> "已连接 · 已选择出口节点，请留意出口状态"
+                status?.optJSONObject("forwarding")?.optBoolean("active") == true -> "已连接 · 正在共享本机网络"
+                requested.optBoolean("advertise_exit") || (requested.optJSONArray("advertise_routes")?.length() ?: 0) > 0 -> "已连接 · 网络共享等待批准"
+                else -> "已连接 · 私有网络"
+            }
             "authorizing" -> "等待浏览器登录并批准设备"
             "reconnecting" -> "正在重新连接"
             else -> "正在建立加密连接"

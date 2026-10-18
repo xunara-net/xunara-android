@@ -7,6 +7,9 @@ import 'package:integration_test/integration_test.dart';
 import 'package:xunara_android/models.dart';
 import 'package:xunara_android/vpn_gateway.dart';
 
+import 'phone_lan_fixture.dart';
+import 'sharing.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -62,8 +65,26 @@ void main() {
       'dot-verified',
       'exit-ready',
       'exit-verified',
+      'exit-revocation-ready',
+      'exit-revocation-sent',
       'exit-revoked',
       'exit-revoked-verified',
+      'phone-subnet-ready',
+      'phone-approval-sent',
+      'phone-subnet-active',
+      'phone-hold-sent',
+      'phone-hold-visible',
+      'phone-policy-sent',
+      'phone-policy-reset',
+      'phone-revocation-sent',
+      'phone-subnet-stopped',
+      'phone-subnet-verified',
+      'phone-exit-ready',
+      'phone-exit-approval-sent',
+      'phone-exit-active',
+      'phone-exit-revocation-sent',
+      'phone-exit-stopped',
+      'phone-exit-verified',
       'second-ready',
       'second-verified',
       'first-restored',
@@ -84,6 +105,7 @@ void main() {
       await gateway.disconnect();
       await waitFor(gateway, ConnectionPhase.disconnected);
     }
+    ClientProfile? releaseProfile;
     try {
       await gateway.saveProfile(
         const ClientProfile(
@@ -358,14 +380,100 @@ void main() {
       await File('$cache/integration-exit-ready')
           .writeAsString(jsonEncode({'dns': usingExit.dnsAddress}));
       await waitForMarker('exit-verified');
+      final stableExitGeneration = (await gateway.snapshot()).generation;
+      await File('$cache/integration-exit-revocation-ready')
+          .writeAsString('{}');
+      await waitForMarker('exit-revocation-sent');
       final revokeDeadline = DateTime.now().add(const Duration(seconds: 30));
       while ((await gateway.snapshot()).exitNodeAvailable) {
         if (DateTime.now().isAfter(revokeDeadline)) fail('出口撤销没有传播到 Android');
         await Future<void>.delayed(const Duration(milliseconds: 200));
       }
       expect((await gateway.snapshot()).phase, ConnectionPhase.connected);
-      await File('$cache/integration-exit-revoked').writeAsString('{}');
+      final revokedExit = await gateway.snapshot();
+      expect(
+        revokedExit.generation,
+        stableExitGeneration,
+        reason: '仅撤销出口路由不能被误判为物理切网并重启 VPN',
+      );
+      final rawExit = await const MethodChannel('net.xunara.android/vpn')
+          .invokeMethod<String>('snapshot');
+      await File('$cache/integration-exit-revoked-status').writeAsString(
+        jsonEncode((jsonDecode(rawExit!) as Map<String, dynamic>)['status']),
+      );
+      await File('$cache/integration-exit-revoked').writeAsString(
+        jsonEncode({
+          'dns': revokedExit.dnsAddress,
+          'dns_active': revokedExit.dnsActive,
+          'generation': revokedExit.generation,
+        }),
+      );
       await waitForMarker('exit-revoked-verified');
+      expect((await gateway.snapshot()).generation, stableExitGeneration);
+      if (const bool.fromEnvironment('XUNARA_TEST_PHONE_ROUTER')) {
+        final lan = await PhoneLanFixture.start();
+        addTearDown(lan.close);
+        Future<void> marker(String name) =>
+            File('$cache/integration-$name').writeAsString('{}');
+        Future<VpnSnapshot> forwarding(
+          bool active, {
+          bool empty = false,
+          bool nonempty = false,
+        }) async {
+          final deadline = DateTime.now().add(const Duration(seconds: 30));
+          while (DateTime.now().isBefore(deadline)) {
+            final snapshot = await gateway.snapshot();
+            if (snapshot.phase == ConnectionPhase.connected &&
+                snapshot.forwardingActive == active &&
+                (!empty || snapshot.forwardingFlows == 0) &&
+                (!nonempty || snapshot.forwardingFlows > 0)) {
+              return snapshot;
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          }
+          fail('手机转发审批 / 撤销状态没有按控制面更新');
+        }
+
+        await gateway.disconnect();
+        await waitFor(gateway, ConnectionPhase.disconnected);
+        await gateway.saveProfile(
+          testProfile.copyWith(advertiseRoutes: ['10.0.2.0/24', 'fec0::/64']),
+        );
+        await gateway.connect();
+        final offered = await waitFor(gateway, ConnectionPhase.connected);
+        expect(offered.addresses, connected.addresses);
+        expect(offered.forwardingActive, isFalse);
+        await marker('phone-subnet-ready');
+        await waitForMarker('phone-approval-sent');
+        final approved = await forwarding(true);
+        expect(approved.forwardingApproved, contains('10.0.2.0/24'));
+        await marker('phone-subnet-active');
+        await waitForMarker('phone-hold-sent');
+        await forwarding(true, nonempty: true);
+        await marker('phone-hold-visible');
+        await waitForMarker('phone-policy-sent');
+        await forwarding(true, empty: true);
+        await marker('phone-policy-reset');
+        await waitForMarker('phone-revocation-sent');
+        await forwarding(false);
+        await marker('phone-subnet-stopped');
+        await waitForMarker('phone-subnet-verified');
+        await gateway.disconnect();
+        await waitFor(gateway, ConnectionPhase.disconnected);
+        await gateway.saveProfile(testProfile.copyWith(advertiseExit: true));
+        await gateway.connect();
+        await waitFor(gateway, ConnectionPhase.connected);
+        await marker('phone-exit-ready');
+        await waitForMarker('phone-exit-approval-sent');
+        final exit = await forwarding(true);
+        expect(exit.forwardingApproved, containsAll(['0.0.0.0/0', '::/0']));
+        expect(exit.dnsActive, isFalse);
+        await marker('phone-exit-active');
+        await waitForMarker('phone-exit-revocation-sent');
+        await forwarding(false);
+        await marker('phone-exit-stopped');
+        await waitForMarker('phone-exit-verified');
+      }
       await gateway.disconnect();
       await waitFor(gateway, ConnectionPhase.disconnected);
       final secondSecret = File('$cache/integration-second-auth-key');
@@ -400,20 +508,39 @@ void main() {
       expect(firstRestored.ownerLogin, connected.ownerLogin);
       await File('$cache/integration-first-restored').writeAsString('{}');
       await waitForMarker('first-restored-verified');
+      if (const bool.fromEnvironment('XUNARA_TEST_SHARING')) {
+        await verifyDeviceSharing(
+          gateway,
+          testProfile,
+          connected,
+          (phase) => waitFor(gateway, phase),
+          waitForMarker,
+        );
+      }
+      if (const bool.fromEnvironment('XUNARA_TEST_RELEASE_SMOKE')) {
+        releaseProfile = testProfile.copyWith(acceptDns: true);
+      }
     } finally {
       authKey = '';
       await gateway.disconnect();
       await waitFor(gateway, ConnectionPhase.disconnected);
-      await gateway.saveProfile(initial.profile);
-      for (final profile in initial.profiles) {
-        await gateway.saveProfile(profile);
-      }
-      await gateway.selectProfile(initial.profile.id);
-      final previous = initial.profiles.map((profile) => profile.id).toSet()
-        ..add(initial.profile.id);
-      for (final profile in (await gateway.bootstrap()).profiles) {
-        if (!previous.contains(profile.id)) {
-          await gateway.forgetProfile(profile.id);
+      if (releaseProfile != null) {
+        // 只保留独立临时身份供同签名正式 APK 升级验收；外层脚本最终恢复原偏好。
+        await gateway.saveProfile(releaseProfile);
+        await File('$cache/integration-release-upgrade-ready')
+            .writeAsString('{}');
+      } else {
+        await gateway.saveProfile(initial.profile);
+        for (final profile in initial.profiles) {
+          await gateway.saveProfile(profile);
+        }
+        await gateway.selectProfile(initial.profile.id);
+        final previous = initial.profiles.map((profile) => profile.id).toSet()
+          ..add(initial.profile.id);
+        for (final profile in (await gateway.bootstrap()).profiles) {
+          if (!previous.contains(profile.id)) {
+            await gateway.forgetProfile(profile.id);
+          }
         }
       }
     }
@@ -427,6 +554,17 @@ Future<void> waitForMarker(String name) async {
   final deadline = DateTime.now().add(const Duration(seconds: 60));
   while (!await marker.exists()) {
     if (DateTime.now().isAfter(deadline)) fail('等待测试阶段 $name 超时');
+    final raw = await const MethodChannel('net.xunara.android/vpn')
+        .invokeMethod<String>('snapshot');
+    final snapshot = jsonDecode(raw!) as Map<String, dynamic>;
+    snapshot.remove('authorization_url');
+    final temporary = File(
+      '/data/user/0/net.xunara.android/cache/integration-runtime-snapshot.tmp',
+    );
+    await temporary.writeAsString(jsonEncode(snapshot));
+    await temporary.rename(
+      '/data/user/0/net.xunara.android/cache/integration-runtime-snapshot',
+    );
     await Future<void>.delayed(const Duration(milliseconds: 200));
   }
 }

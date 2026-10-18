@@ -20,8 +20,10 @@ ip -6 address add 2001:db8::77/128 dev lo
 echo 1 > /proc/sys/net/ipv4/ip_forward
 "$fixture" -mode fixture -dir "$directory" >"$directory/fixture.log" 2>&1 & pids="$pids $!"
 "$fixture" -mode dns -listen 0.0.0.0:5353 >"$directory/dns.log" 2>&1 & pids="$pids $!"
-for port in 18080 18081; do
-    case "$port" in 18080) target=8080;; 18081) target=8081;; esac
+ports='18080 18081'
+if [ "${XUNARA_TEST_SHARING:-false}" = true ]; then ports="$ports 18082 18083"; fi
+for port in $ports; do
+    case "$port" in 18080) target=8080;; 18081) target=8081;; 18082) target=8082;; 18083) target=8083;; esac
     "$fixture" -mode proxy -listen "127.0.0.1:$port" -target "127.0.0.1:$target" >"$directory/proxy-$port.log" 2>&1 & pids="$pids $!"
 done
 attempt=0
@@ -50,5 +52,10 @@ attempt=0
 until [ -f "$directory/exit-ready" ] && curl --noproxy '*' --max-time 2 -fsS -X POST http://127.0.0.1:18080/_test/exit >"$directory/exit-approve.json" 2>/dev/null; do
     attempt=$((attempt+1)); [ "$attempt" -lt 150 ] || exit 1; sleep 0.2
 done
+if [ "${XUNARA_TEST_PHONE_ROUTER:-false}" = true ]; then
+    "$fixture" -mode phone -dir "$directory" >"$directory/phone-probe.log" 2>&1 & pids="$pids $!"
+    attempt=0
+    until [ -f "$directory/phone-probe-ready" ]; do attempt=$((attempt+1)); [ "$attempt" -lt 150 ] || exit 1; sleep 0.2; done
+fi
 touch "$directory/namespace-ready"
 wait

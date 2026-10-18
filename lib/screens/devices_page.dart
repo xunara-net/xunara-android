@@ -35,7 +35,7 @@ class _DevicesPageState extends State<DevicesPage> {
               ),
               SizedBox(height: 10),
               Text(
-                '只展示服务器允许本设备发现的节点，\n不会读取其他用户的网络。',
+                '只展示服务器授权本设备发现的节点，\n包括已接受的共享设备。',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.blueGrey, height: 1.6),
               ),
@@ -102,7 +102,7 @@ class _DevicesPageState extends State<DevicesPage> {
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      '${device.addresses.isEmpty ? '未分配地址' : addressOnly(device.addresses.first)}\n${device.pathLabel}',
+                      '${device.addresses.isEmpty ? '未分配地址' : addressOnly(device.addresses.first)}\n${device.shared ? '跨网络共享 · ' : ''}${device.pathLabel}',
                       style: const TextStyle(height: 1.6),
                     ),
                   ),

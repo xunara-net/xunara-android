@@ -21,7 +21,7 @@ class UnderlayMonitor(context: Context, private val handler: Handler, private va
     private data class Entry(var capabilities: NetworkCapabilities? = null, var properties: LinkProperties? = null)
     private val manager = context.getSystemService(ConnectivityManager::class.java)
     private val entries = mutableMapOf<Network, Entry>()
-    private var preferred: Network? = null
+    private val preference = PhysicalNetworkPreference()
     private var registered = false
     private var defaultRegistered = false
     private var closed = false
@@ -38,17 +38,22 @@ class UnderlayMonitor(context: Context, private val handler: Handler, private va
             entries.getOrPut(network) { Entry() }.properties = properties
             publish()
         }
-        override fun onLost(network: Network) { entries.remove(network); publish() }
+        override fun onLost(network: Network) {
+            entries.remove(network)
+            preference.physicalLost(network.networkHandle)
+            publish()
+        }
     }
     private val defaultCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
             if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                preferred = network
+                preference.capabilities(network.networkHandle, false)
                 publish()
             }
         }
         override fun onLost(network: Network) {
-            if (preferred == network) { preferred = null; publish() }
+            preference.defaultLost(network.networkHandle, entries.keys.map { it.networkHandle }.toSet())
+            publish()
         }
     }
 
@@ -77,7 +82,8 @@ class UnderlayMonitor(context: Context, private val handler: Handler, private va
         // 不能联网的 LAN 仍必须保留；但 IMS / MMS 网卡不能触发自动重连。
         val usable = physical.filter { it.value.capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true }
         val properties = physical.mapNotNull { it.value.properties }
-        val selected = usable.firstOrNull { it.key == preferred } ?: usable.firstOrNull()
+        val preferred = preference.select(usable.map { it.key.networkHandle })
+        val selected = usable.firstOrNull { it.key.networkHandle == preferred }
         val capabilities = selected?.value?.capabilities
         val label = when {
             capabilities == null -> "等待网络恢复"

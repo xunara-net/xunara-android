@@ -48,6 +48,8 @@ class ClientProfile {
     this.dnsResolver = '',
     this.dnsBootstrap = const [],
     this.validateDnssec = false,
+    this.advertiseRoutes = const [],
+    this.advertiseExit = false,
   });
   factory ClientProfile.fromJson(Map<String, dynamic> json) => ClientProfile(
     server: json['server'] as String? ?? '',
@@ -64,6 +66,8 @@ class ClientProfile {
     dnsResolver: json['dns_resolver'] as String? ?? '',
     dnsBootstrap: (json['dns_bootstrap'] as List? ?? []).cast<String>(),
     validateDnssec: json['dnssec_validate'] as bool? ?? false,
+    advertiseRoutes: (json['advertise_routes'] as List? ?? []).cast<String>(),
+    advertiseExit: json['advertise_exit'] as bool? ?? false,
   );
 
   final String server;
@@ -80,6 +84,8 @@ class ClientProfile {
   final String dnsResolver;
   final List<String> dnsBootstrap;
   final bool validateDnssec;
+  final List<String> advertiseRoutes;
+  final bool advertiseExit;
   String get displayLabel => label.isEmpty ? displayServer : label;
   String get displayServer => Uri.tryParse(server)?.authority ?? server;
   Map<String, dynamic> toJson() => {
@@ -97,6 +103,8 @@ class ClientProfile {
     'dns_resolver': dnsResolver,
     'dns_bootstrap': dnsBootstrap,
     'dnssec_validate': validateDnssec,
+    'advertise_routes': advertiseRoutes,
+    'advertise_exit': advertiseExit,
   };
 
   ClientProfile copyWith({
@@ -114,6 +122,8 @@ class ClientProfile {
     String? dnsResolver,
     List<String>? dnsBootstrap,
     bool? validateDnssec,
+    List<String>? advertiseRoutes,
+    bool? advertiseExit,
   }) => ClientProfile(
     server: server ?? this.server,
     hostname: hostname ?? this.hostname,
@@ -129,6 +139,8 @@ class ClientProfile {
     dnsResolver: dnsResolver ?? this.dnsResolver,
     dnsBootstrap: dnsBootstrap ?? this.dnsBootstrap,
     validateDnssec: validateDnssec ?? this.validateDnssec,
+    advertiseRoutes: advertiseRoutes ?? this.advertiseRoutes,
+    advertiseExit: advertiseExit ?? this.advertiseExit,
   );
 
   static String? validateServer(String? raw) {
@@ -194,6 +206,7 @@ class NetworkDevice {
   final List<String> routes;
   final String stableId;
   final bool exitNode;
+  bool get shared => stableId.startsWith('share:');
   String get displayName => name.replaceFirst(RegExp(r'\.$'), '');
   String get pathLabel => path == 'direct' ? '直连已探测' : '中继候选';
 }
@@ -249,10 +262,14 @@ class VpnSnapshot {
     this.dnssecActive = false,
     this.exitNodeAvailable = false,
     this.ownerLogin = '',
+    this.forwardingActive = false,
+    this.forwardingApproved = const [],
+    this.forwardingFlows = 0,
   });
   factory VpnSnapshot.fromJson(Map<String, dynamic> json) {
     final status = json['status'] as Map<String, dynamic>? ?? {};
     final dns = status['dns'] as Map<String, dynamic>? ?? {};
+    final forwarding = status['forwarding'] as Map<String, dynamic>? ?? {};
     final exit = status['exit_node'] as Map<String, dynamic>? ?? {};
     return VpnSnapshot(
       phase: ConnectionPhase.values.firstWhere(
@@ -287,6 +304,10 @@ class VpnSnapshot {
       dnssecActive: dns['dnssec_validate'] as bool? ?? false,
       exitNodeAvailable: exit['available'] as bool? ?? false,
       ownerLogin: status['owner_login'] as String? ?? '',
+      forwardingActive: forwarding['active'] as bool? ?? false,
+      forwardingApproved: (forwarding['approved'] as List? ?? [])
+          .cast<String>(),
+      forwardingFlows: forwarding['flows'] as int? ?? 0,
     );
   }
   final ConnectionPhase phase;
@@ -310,6 +331,9 @@ class VpnSnapshot {
   final bool dnssecActive;
   final bool exitNodeAvailable;
   final String ownerLogin;
+  final bool forwardingActive;
+  final List<String> forwardingApproved;
+  final int forwardingFlows;
 }
 
 String expiryLabel(String? raw) {

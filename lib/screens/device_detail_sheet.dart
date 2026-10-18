@@ -106,6 +106,7 @@ class _DeviceDetailSheetState extends State<DeviceDetailSheet> {
                 ),
               if (available) ...[
                 const SizedBox(height: 12),
+                if (device.shared) _value('设备来源', '跨网络共享 · 访问仍受 ACL 和共享状态约束'),
                 _value('操作系统', osLabel(device.os)),
                 if (device.name.contains('.'))
                   _copyable('设备域名（控制面）', device.displayName),

@@ -38,6 +38,7 @@
 - 可选 VPN DNS：MagicDNS A/AAAA/PTR、额外 IP 记录、搜索域、分流与全局 IP 解析器；DNS 地址冲突自动退避，支持 UDP / TCP 查询。
 - DNS 页右上角可配置 DoH / DoT、引导 IP 与本机 DNSSEC 验证；保留 MagicDNS / 分流，签名或加密失败不回退明文。系统诊断新增私人 DNS 状态与系统网络设置入口。
 - 内核按服务端提供的 peer 专属地址提示完成共享 masquerade，保留租户隔离与 ACL；不把共享变成全局设备管理。
+- 「设置 → 共享本机网络」支持免 Root 提供子网和出口，实际转发双栈 TCP / UDP / ICMP Echo；只有请求、批准与 ACL 同时允许才生效。撤销权限关闭旧流，出口另提供 WireGuard 内的 peerapi DNS。
 - 可选择已批准的出口节点，转发 IPv4 / IPv6 公网流量并通过该出口的 peerapi 加密解析 DNS。出口撤销时保留 VPN 内的阻断，不自动直连或切换其他出口。
 - 账号与控制器列表：每项保留设备名、DNS、出口、重连和应用分流偏好。切换先结束旧连接，不自动接入；移除记录不撤销服务器设备。
 - 应用分流支持全部应用、排除所选、仅所选三种模式，对私网、已开启的 DNS / 出口均生效。仅所选清单全部卸载时拒绝建立 VPN，不回退成全部应用。
@@ -63,11 +64,11 @@ Android 同时只能运行一个 VPN。网络环境改变时，默认安全退�
 
 ## 当前边界
 
-- 手机作为出口 / 子网路由器、完整 Tailnet Lock、文件传输和自动升级尚未完成；不会放一个无效开关冒充支持。Tailnet Lock 启用时明确拒绝未实现的本机签名链验证。
+- 完整 Tailnet Lock、文件传输和自动升级尚未完成；不会放一个无效开关冒充支持。Tailnet Lock 启用时明确拒绝未实现的本机签名链验证。
 - DNS 支持 IP / IP:端口、HTTPS DoH、TLS DoT 和本地 DNSSEC。域名形式的加密解析器须配置引导 IP；HTTPS 不接受 URL 凭据、query、重定向或分块响应。出口模式固定使用出口 peerapi，不把自定义解析器偷偷发到手机原网络。
 - DNSSEC 不照抄上游 AD，MagicDNS 本地记录不冒充签名；非公开分流区可能无法验证。系统私人 DNS 提供检测 / 设置引导，第三方应用任意 HTTPS DoH 不能在不破解证书的前提下透明强制改写；不会通过中间人证书绕过应用安全。
 - 出口模式保留 LAN 且强制 VPN DNS；所选出口失效时不回退。主动断开、系统停止 / 撤销 VPN 或进程退出后，Android 会恢复普通网络；这不是跨进程退出仍生效的锁定模式。玄序自身与被排除的应用不走出口。
-- 手机仅作子网**访问端**，不要求 root、不在 Android 上广播子网或开启内核转发。
+- 手机可明确选择提供子网 / 出口，但不修改内核转发，不是二层桥接。转发受物理网络能力及系统 ICMP 权限约束，有连接数、速率和空闲超时限制；参见 [手机网络共享](docs/phone-forwarding.md)。
 - 外层 UDP 目前使用 IPv4；隧道可传 IPv4 / IPv6 的 TCP、UDP、ICMP，不支持 IP 分片或 IPv6 扩展头。最多 256 个可见节点。
 - 「中继候选」表示内核配置的回退路径，不伪报对端在线或已测速。STUN 不是 UDP 业务中继。
 - 人类账号 / OAuth Session 留在系统浏览器；App 没有平台管理员令牌，不自动继承浏览器登录权限。
@@ -122,7 +123,7 @@ node scripts/check-jni-contract.cjs build/app/outputs/flutter-apk/app-x86_64-rel
 sh scripts/test-android-vpn.sh emulator-5580
 ```
 
-具备公网 443 / 853 连通条件时，可用 `XUNARA_TEST_PUBLIC_DNS=true sh scripts/test-android-vpn.sh emulator-5580` 验收手机真实 DoH / DoT、DNSSEC 签名链与错误签名拒绝；默认隔离测试不依赖公网 DNS。完整跨租户共享仍需专项端到端验收，不能把校验和协议对照或普通组网回归冒充为共享验收。
+具备公网 443 / 853 连通条件时，可用 `XUNARA_TEST_PUBLIC_DNS=true sh scripts/test-android-vpn.sh emulator-5580` 验收手机真实 DoH / DoT、DNSSEC 签名链与错误签名拒绝；默认隔离测试不依赖公网 DNS。`XUNARA_TEST_PHONE_ROUTER=true` 验收官方 tsnet 经手机转发；`XUNARA_TEST_SHARING=true` 验收三租户重叠原地址共享、ACL / 子网隔离和撤销，可合并开启。不能把协议向量或普通组网回归冒充为共享验收。
 
 需先启动专用 Android 模拟器，并安装 `socat`、`jq`、`iproute2`；宿主机允许 rootless user / network namespace。测试只允许 `emulator-*`，不自动给真机授权。测试服务运行在隔离 namespace，宿主代理只监听 127.0.0.1，Auth Key 通过 stdin 写入应用私有缓存，不出现在 argv、URL 或 APK 中，不访问生产账号。
 

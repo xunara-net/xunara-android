@@ -4,7 +4,7 @@ import java.net.URI
 import java.security.MessageDigest
 
 data class Profile(val server: String, val hostname: String, val acceptRoutes: Boolean, val autoReconnect: Boolean = true, val appRouting: AppRouting = AppRouting(),
-    val id: String = "", val label: String = "", val acceptDns: Boolean = false, val exitNodeId: String = "", val exitNodeName: String = "", val dns: DnsPreferences = DnsPreferences()) {
+    val id: String = "", val label: String = "", val acceptDns: Boolean = false, val exitNodeId: String = "", val exitNodeName: String = "", val dns: DnsPreferences = DnsPreferences(), val forwarding: ForwardingPreferences = ForwardingPreferences()) {
     fun validated(): Profile {
         val uri = URI(server.trim())
         val host = uri.host ?: error("请输入完整服务器地址")
@@ -21,7 +21,8 @@ data class Profile(val server: String, val hostname: String, val acceptRoutes: B
         require(label.trim().length <= 48 && label.none { it.isISOControl() }) { "账号备注最多 48 字，不可含控制字符" }
         require(exitNodeId.length <= 128 && exitNodeId.all { it.isLetterOrDigit() || it in "_-" }) { "出口节点标识无效" }
         require(exitNodeName.length <= 253 && exitNodeName.none { it.isISOControl() }) { "出口节点名称无效" }
-        return copy(server = canonical, id = identity, label = label.trim(), appRouting = appRouting.validated(), dns = dns.validated())
+        require(!forwarding.advertiseExit || exitNodeId.isEmpty()) { "请先停止使用其他出口，再提供本机出口" }
+        return copy(server = canonical, id = identity, label = label.trim(), appRouting = appRouting.validated(), dns = dns.validated(), forwarding = forwarding.validated())
     }
 
     // 老配置沿用原 SHA256(server) 目录；新账号不能因为控制地址相同而复用旧设备。

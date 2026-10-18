@@ -29,6 +29,7 @@ class ExitNodePage extends StatelessWidget {
         final editable =
             !controller.busy &&
             profile != null &&
+            !profile.advertiseExit &&
             {
               ConnectionPhase.connected,
               ConnectionPhase.disconnected,
@@ -47,6 +48,11 @@ class ExitNodePage extends StatelessWidget {
               style: TextStyle(color: Colors.blueGrey, height: 1.7),
             ),
             const SizedBox(height: 20),
+            if (profile?.advertiseExit == true)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 16),
+                child: Text('本机正在提供出口。请先在共享本机网络中关闭提供出口，再选择其他设备。'),
+              ),
             Card(
               child: ListTile(
                 key: const Key('exit-none'),
