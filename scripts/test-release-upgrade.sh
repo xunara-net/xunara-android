@@ -65,8 +65,14 @@ grep -q xunara-core-ok "$directory/release-tcp6.log"
 grep -F "$router_ip" "$directory/release-magicdns.log" >/dev/null
 "$adb" -s "$serial" exec-out screencap -p >"$directory/release-connected.png"
 press '设置'
+sleep 1
 press '共享本机网络'
-sleep 0.5
+for attempt in $(seq 1 20); do
+    "$adb" -s "$serial" shell 'uiautomator dump /data/local/tmp/xunara-release-window.xml >/dev/null 2>&1; cat /data/local/tmp/xunara-release-window.xml' >"$directory/release-forwarding-window.xml"
+    if grep -Fq '保存并应用' "$directory/release-forwarding-window.xml"; then break; fi
+    [ "$attempt" -lt 20 ] || { echo '共享页面未完成导航，不能用设置列表截图冒充。' >&2; exit 1; }
+    sleep 0.2
+done
 "$adb" -s "$serial" exec-out screencap -p >"$directory/release-forwarding.png"
 "$adb" -s "$serial" shell am force-stop net.xunara.android
 attempt=0
