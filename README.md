@@ -136,3 +136,11 @@ sh scripts/test-android-vpn.sh emulator-5580
 详见 [架构和安全边界](docs/architecture.md)、[验收记录](docs/verification.md)、[安全反馈](SECURITY.md)。
 
 0.3.0 一次性将旧单服务器 / catalog_v1 迁移到 catalog_v2，保留原控制器哈希身份目录，新账号使用独立随机目录；旧键成功提交后删除。配置损坏时拒绝覆盖，不能用清除应用数据代替修复或服务端撤销。回滚必须保留新配置读取能力，详见[DNS、出口与多账号设计](docs/dns-exit-accounts.md)。
+
+### 获授权的现网出口诊断
+
+`integration_test/live_exit_test.dart` 只用于操作者明确授权的现网采集，不进入生产 `lib/main.dart` APK。通过 stdin 将单独签发的短期临时设备密钥写入应用私有的 `cache/live-exit-auth-key`，配置写入 `cache/live-exit-settings`，字段为 `server`、`hostname`、全新 UUID `profile_id`、指定出口的 `exit_id`。只接受 HTTPS 根地址和 `diag-` 诊断设备名，禁止复用已有配置 ID 或用户机器私钥。
+
+测试建立真实 TUN 并选择指定出口，将不含授权链接的状态与 ICMP 结果写入 `cache/live-exit-*`，等待外部普通 UID 请求实际公网 IP、VPN DNS 和 HTTPS，再以 `cache/live-exit-finish` 结束采集。**采集测试退出成功不等于出口可用**：业务结果必须以这些外部请求及实际探测结果为准，不能用 App 自身豁免 VPN 的请求或绿色连接状态代替。
+
+只在专用模拟器运行并预先核对签名、备份原 APK / 偏好；结束恢复原内容，仅删除本轮 UUID 的临时身份目录，以及控制面中本轮确切的临时节点 / 密钥。不得卸载原应用、清除全部数据、撤销其他会话或改动真实出口的批准路由。
