@@ -15,7 +15,7 @@ jni = "=0.21.1"
 ipnet = "2"
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "net", "time", "sync"] }
-xunara-client = { git = "https://github.com/xunara-net/xunara-client", rev = "00c8e9f64fce34878c5d860be1cc597f2f28a868" }
+xunara-client = { git = "https://github.com/xunara-net/xunara-client", rev = "28e6a919874f3aa895b1aa977277e37a52ef4099" }
 zeroize = "1"
 
 [profile.release]

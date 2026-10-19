@@ -321,3 +321,39 @@ ARM64 物理手机、各厂商后台和物理移动网络仍需真机验收，�
 ### 尚未确认
 
 双安卓专项使用 Debug 入口，不代表 ARM64 物理手机、厂商后台、实际蜂窝网络或双安卓 Release 全部通过。实验室成功不等于现网问题已修复；现场仍需两台设备同时在线，核对实际 APP 版本、出口选择、后台限制和两端运行诊断。
+
+## 2026-10-20：0.5.1 出口 TCP 握手修复
+
+### What changed
+
+Rust 内核固定到 `28e6a919874f3aa895b1aa977277e37a52ef4099`：普通 TCP 转发先完成物理拨号，再向隧道客户端发送 SYN-ACK，拨号失败返回拒绝，取消握手及时释放流。本机 peerapi DNS 不需要物理 TCP 后端，保留原握手行为。兼容 fixture 使用 `b1689d2f56ec89642291dc6c343501abc52c4c29`，新增确定失败的 IPv6 与可用 IPv4 的同域名回退专项。
+
+### Why
+
+获授权的现网诊断中，同一手机出口的隧道双栈 ICMP、出口 DNS 和 IPv4 HTTPS 正常，默认域名 HTTPS 却选中 IPv6 并在握手后重置。源码存在先接受 TCP、后拨物理后端的问题，可能让应用过早取消 IPv4 竞争。修复与官方 Tailscale v1.104.1 的先拨号后接受语义一致；不把一次实验室成功或一条连接重置当成所有真机故障的唯一证据。
+
+### Compatibility impact
+
+- 版本 `0.5.1+8`，实际 ARM64 / x86_64 versionCode 为 `2008` / `4008`；同上一公开预览的本地测试签名，覆盖安装保留账号和机器身份。
+- 不改变 TS2021、Noise、WireGuard、DERP、DNSConfig、身份目录、路由批准或服务端迁移。不全局禁用 IPv6，不篡改 AAAA 答案。
+- 生效位置是提供出口的手机，不能只升级使用出口的一端；建议两端一起更新。
+
+### Security impact
+
+所有物理 socket 继续 protect，ACL、认证 peer、来源和流状态绑定保持不变。IPv4 回退仍经过原指定出口，不是出口故障时直连。现网专项使用独立短期临时机器密钥，没有借用人类会话或手机私钥；诊断节点和两把临时密钥已清理，原设备、批准路由及线上服务保持不变。
+
+### Tests
+
+- Rust 核心 fmt / clippy / 44 项普通测试通过；另显式通过真实双栈 ICMP、公共 HTTPS DNSSEC 和两项官方协议向量。真实 Linux TUN / 官方 tsnet / ACL / 子网 / DERP 回退恢复，以及 SNAT 清理和已有表保护通过。
+- Flutter 格式 / analyze / 41 项测试、JNI 合约 5 项、原生生命周期 3 项、Kotlin 28 项、Debug / Release lint 通过。兼容 Go helper 的 test-race / vet / build-race 与静态构建通过。
+- ARM64 / x86_64 Release 构建成功，两个实际 APK 均通过混淆 JNI 检查、签名、16 KiB ELF LOAD 和 zipalign 校验；核对重新构建的 JNI 库经 Gradle 合并 / strip 后确实进入 APK，没有混入旧库。
+- 未 Root Android 36 x86_64 完整扩展专项通过：真实 DoH / DoT、DNSSEC 正反例、系统 MagicDNS、官方出口、手机双栈 TCP / UDP / ICMP、ACL / 路由 / 出口撤销、账号恢复和跨租户共享隔离。
+- 新增确定性回归通过：先验证手机 LAN IPv6 的 18090 端口确实 Connection refused，再由官方 tsnet 验证 `ipv6_rejected=true`、`fallback=true`，真实 HTTP 响应仍经过该手机出口取得。
+- 实际 `lib/main.dart` 混淆 Release 同签名覆盖升级后，无需重新提供接入密钥即可连接，双栈 TCP、系统 MagicDNS、共享页面及停止 VPN 清理均通过；已安装 APK SHA256 与待发布文件一致。共享页面另外人工查看实际截图，控件和固定保存按钮可见。
+- 两台独立未 Root Android 36 x86_64 的公网出口专项通过：真实公网 IPv4 HTTP、DNS UDP / TCP、经出口获取 HTTPS 200 页面并验证系统 CA / 主机名；撤销出口后 DNS 失败关闭、公网不能直连且客户端 generation 不变。两端专项使用 Debug 入口，不冒充双端 Release 或 ARM64 真机验收。
+
+早期使用任意外网 IPv6 黑洞地址的回归受到 QEMU 用户态网络影响：未运行 VPN 时物理 connect 也会先成功后关闭。另一轮测试因执行中的脚本被编辑而中断。这些失败记录均保留、未改判成功；最终在固定脚本和明确物理拒绝基线下完整重跑通过。
+
+### 尚未确认
+
+ARM64 物理手机、厂商后台和真实蜂窝网络仍需升级后复测，不能宣称已远程修复用户尚未升级的设备。仍为测试签名预览，不承诺跨任意 CI 测试密钥覆盖；完整 Tailnet Lock、长期正式签名等既有边界不变。

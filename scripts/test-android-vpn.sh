@@ -76,9 +76,9 @@ for port in $ports; do
 done
 curl --noproxy '*' --max-time 4 -fsS 'http://127.0.0.1:18080/_test/node?host=rust-router' >/dev/null
 if [ "$phone_router" = true ]; then
-    for port in 18088 18089; do
+    for port in 18088 18089 18090; do
         [ -z "$(ss -H -ltn "sport = :$port")" ] && [ -z "$(ss -H -lun "sport = :$port")" ] || { echo "已有 $port 测试端口，拒绝覆盖" >&2; exit 1; }
-        case "$port" in 18088) target=8088;; 18089) target=8089;; esac
+        case "$port" in 18088) target=8088;; 18089|18090) target=8089;; esac
         socat "TCP4-LISTEN:$port,bind=127.0.0.1,reuseaddr,fork" "EXEC:sh '$root/scripts/test-proxy-connection.sh' $namespace $target" >"$directory/phone-TCP4-LISTEN-$port.log" 2>&1 & pids="$pids $!"
     done
     socat -T 3 'UDP4-RECVFROM:18088,bind=127.0.0.1,reuseaddr,fork' "EXEC:sh '$root/scripts/test-proxy-connection.sh' $namespace 5353 udp" >"$directory/phone-UDP4-RECVFROM.log" 2>&1 & pids="$pids $!"
@@ -316,6 +316,13 @@ if [ "$phone_router" = true ]; then
     phone_probe exit
     jq -e '[.tcp4,.tcp6,.udp4,.udp6,.icmp4,.icmp6] | all(. == true)' "$directory/phone-exit.json" >/dev/null || { cat "$directory/phone-exit.json"; exit 1; }
     phone_flag dns dns
+    if "$adb" -s "$serial" shell "nc -6 -z -w 3 $phone_ipv6 18090" >"$directory/phone-physical-refused.log" 2>&1; then
+        echo 'IPv6 基线端口已被监听，不能用于验证拨号失败。' >&2; exit 1
+    fi
+    grep -Fq 'Connection refused' "$directory/phone-physical-refused.log" || { cat "$directory/phone-physical-refused.log"; exit 1; }
+    phone_probe family-fallback
+    jq -e '.ipv6_rejected == true and .fallback == true' "$directory/phone-family-fallback.json" >/dev/null || { cat "$directory/phone-family-fallback.json"; exit 1; }
+    printf 'PASS 不可达 IPv6 不伪报 TCP 成功，真实域名连接自动回退可用 IPv4 出口\n'
     phone_flag hold held
     curl --noproxy '*' --max-time 4 -fsS -X POST 'http://127.0.0.1:18080/_test/exit?host=android-integration&revoke=1' >"$directory/phone-exit-revoked.json"
     "$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-phone-exit-revocation-sent

@@ -125,6 +125,8 @@ sh scripts/test-android-vpn.sh emulator-5580
 
 具备公网 443 / 853 连通条件时，可用 `XUNARA_TEST_PUBLIC_DNS=true sh scripts/test-android-vpn.sh emulator-5580` 验收手机真实 DoH / DoT、DNSSEC 签名链与错误签名拒绝；默认隔离测试不依赖公网 DNS。`XUNARA_TEST_PHONE_ROUTER=true` 验收官方 tsnet 经手机转发；`XUNARA_TEST_SHARING=true` 验收三租户重叠原地址共享、ACL / 子网隔离和撤销，可合并开启。不能把协议向量或普通组网回归冒充为共享验收。
 
+手机转发专项另检查同一域名的不可达 IPv6 与可用 IPv4：强制 IPv6 拨号必须失败，默认双栈连接应经该手机出口回退 IPv4 并取得真实 HTTP 响应，防止提前 SYN-ACK 把故障拖到 TLS 阶段。该项由官方 tsnet 发起，不使用 App 自己已绕过 VPN 的请求假装通过。
+
 需先启动专用 Android 模拟器，并安装 `socat`、`jq`、`iproute2`；宿主机允许 rootless user / network namespace。测试只允许 `emulator-*`，不自动给真机授权。测试服务运行在隔离 namespace，宿主代理只监听 127.0.0.1，Auth Key 通过 stdin 写入应用私有缓存，不出现在 argv、URL 或 APK 中，不访问生产账号。
 
 测试验证的是其他 Android UID 发起的真实 TUN / ICMP / TCP / ACL / DERP / 子网流量，而非 App 自己从被排除的网络请求制造“组网成功”。与官方 Go tsnet 的双向兼容、直连 / DERP 切换由 Rust 内核仓库的真实 Linux 网络测试覆盖；不能把它说成 Android 真机已验收。
