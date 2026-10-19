@@ -45,11 +45,12 @@ XUNARA_TEST_SHARING=true sh scripts/test-android-vpn.sh emulator-5580
 ## 双安卓公网出口专项
 
 ```sh
+(cd ../xunara-client/tests/compat && go build -race -o ../../target/compat-fixture . && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags='-s -w' -o ../../target/compat-web-probe .)
 sh scripts/test-android-exit-pair.sh emulator-5580 emulator-5584
 ```
 
 需要两台已启动、同测试签名且已初始化应用的专用未 Root 模拟器，以及重新构建的 Go compat fixture。脚本预检原 APK 的签名，不卸载、清空或覆盖不同签名的旧应用；应为这种情况另建模拟器。
 
-一台提供出口，另一台明确选用该出口。隔离控制面使用默认 ACL 和 `114.114.114.114` / `1.1.1.1`，普通 shell UID 直接请求公网 IPv4 HTTP、经 VPN DNS 查询真实公网域名的 UDP / TCP 响应。最后撤销出口，确认 DNS 返回 SERVFAIL、公网请求不能直连，客户端 generation 不变；不能只凭 App 显示“出口可用”算通过。
+一台提供出口，另一台明确选用该出口。隔离控制面使用默认 ACL 和 `114.114.114.114` / `1.1.1.1`，普通 shell UID 直接请求公网 IPv4 HTTP、经 VPN DNS 查询真实公网域名的 UDP / TCP 响应，再解析域名并下载实际 HTTPS 页面。HTTPS 探针只在 x86_64 模拟器 shell 临时执行，使用系统 CA 验证主机名与证书链，不配置代理、不跳过证书验证，也不打包进客户端。最后撤销出口，确认 DNS 返回 SERVFAIL、公网请求不能直连，客户端 generation 不变；不能只凭 App 显示“出口可用”算通过。
 
 该专项安装 Debug 集成入口，使用与预览包相同的原生内核，不冒充 ARM64 真机或双安卓 Release 验收。结束恢复原偏好及原 APK，保留账号私钥，清除专项私有缓存。私有日志只适合本机排障，不要整体上传其中的 fixture 身份目录。

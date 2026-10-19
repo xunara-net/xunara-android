@@ -32,11 +32,13 @@ client_serial=${2:-emulator-5582}
 for serial in "$exit_serial" "$client_serial"; do
     case "$serial" in emulator-*) :;; *) echo '不得操作物理手机。' >&2; exit 1;; esac
     [ "$("$adb" -s "$serial" get-state)" = device ] || exit 1
+    [ "$("$adb" -s "$serial" shell getprop ro.product.cpu.abi | tr -d '\r')" = x86_64 ] || { echo '本专项探针只用于 x86_64 模拟器。' >&2; exit 1; }
     for port in 18080 18081; do
         if "$adb" -s "$serial" reverse --list | grep -q "tcp:$port "; then echo '已有反向端口映射，拒绝覆盖。' >&2; exit 1; fi
     done
 done
 for program in flutter socat unshare nsenter curl ip jq node ss; do command -v "$program" >/dev/null || { echo "缺少 $program" >&2; exit 1; }; done
+[ -x "$core/target/compat-web-probe" ] || { echo '请先用 CGO_ENABLED=0 构建 tests/compat 到 target/compat-web-probe。' >&2; exit 1; }
 for port in 18080 18081; do [ -z "$(ss -H -ltn "sport = :$port")" ] || { echo '测试端口已占用。' >&2; exit 1; }; done
 directory=$(mktemp -d)
 pids=''
@@ -48,6 +50,7 @@ cleanup() {
             "$adb" -s "$serial" shell am force-stop net.xunara.android >/dev/null 2>&1 || :
             "$adb" -s "$serial" shell "run-as net.xunara.android sh -c 'for file in cache/exit-pair-*; do if [ -f \"\$file\" ]; then rm \"\$file\"; fi; done'" >/dev/null 2>&1 || outcome=1
         fi
+        if [ -f "$directory/$serial-probe-installed" ]; then "$adb" -s "$serial" shell rm /data/local/tmp/xunara-exit-pair-probe >/dev/null 2>&1 || outcome=1; fi
         if [ -s "$directory/$serial-profile.xml" ]; then
             "$adb" -s "$serial" shell "run-as net.xunara.android sh -c 'cat > shared_prefs/profile.xml; if [ -f shared_prefs/profile.xml.bak ]; then rm shared_prefs/profile.xml.bak; fi'" <"$directory/$serial-profile.xml" >/dev/null 2>&1 || outcome=1
         fi
@@ -135,6 +138,13 @@ dns_query() {
 dns_query udp ANSWER
 dns_query tcp ANSWER
 printf 'PASS 普通 UID 的公网 DNS UDP/TCP 经 WireGuard peerapi 与安卓出口解析\n'
+"$adb" -s "$client_serial" shell test ! -e /data/local/tmp/xunara-exit-pair-probe
+touch "$directory/$client_serial-probe-installed"
+"$adb" -s "$client_serial" push "$core/target/compat-web-probe" /data/local/tmp/xunara-exit-pair-probe >/dev/null
+"$adb" -s "$client_serial" shell chmod 700 /data/local/tmp/xunara-exit-pair-probe
+"$adb" -s "$client_serial" shell "SSL_CERT_DIR=/apex/com.android.conscrypt/cacerts:/system/etc/security/cacerts /data/local/tmp/xunara-exit-pair-probe -mode web-probe -listen '$dns_ip:53'" >"$directory/public-https.log"
+grep -q '^PASS verified HTTPS status=200 bytes=' "$directory/public-https.log"
+printf 'PASS 普通 UID 经安卓出口解析域名并取得真实 HTTPS 页面，证书链与主机名校验通过\n'
 snapshot "$exit_serial" >"$directory/exit-forwarded.json"
 jq -e '.status.forwarding.active and .status.receive_stats.decoded_packets > 0 and .status.bytes_sent > 0' "$directory/exit-forwarded.json" >/dev/null
 curl --noproxy '*' --max-time 5 -fsS -X POST 'http://127.0.0.1:18080/_test/exit?host=android-pair-exit&revoke=1' >"$directory/revoked.json"

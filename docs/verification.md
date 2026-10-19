@@ -295,7 +295,7 @@ ARM64 物理手机、各厂商后台和物理移动网络仍需真机验收，�
 
 ### What changed
 
-新增 `integration_test/exit_pair_test.dart` 和 `scripts/test-android-exit-pair.sh`：两台独立安卓身份接入隔离控制面，真实申请、批准并选用手机出口；普通 UID 验证公网 IP / HTTP、真实公网 DNS UDP / TCP 和撤销后的失败关闭。DNS 检查器新增不依赖 CDN 固定地址的 ANSWER 检查。
+新增 `integration_test/exit_pair_test.dart` 和 `scripts/test-android-exit-pair.sh`：两台独立安卓身份接入隔离控制面，真实申请、批准并选用手机出口；普通 UID 验证公网 IP / HTTP、真实公网 DNS UDP / TCP、带完整证书校验的 HTTPS 页面和撤销后的失败关闭。DNS 检查器新增不依赖 CDN 固定地址的 ANSWER 检查。
 
 ### Why
 
@@ -312,6 +312,7 @@ ARM64 物理手机、各厂商后台和物理移动网络仍需真机验收，�
 ### Tests
 
 - 两台未 Root Android 36 x86_64 模拟器实际通过：出口双栈获批、客户端 DNS 接管、普通 UID 经安卓出口访问 `1.1.1.1:80` 并取得真实 HTTP 响应，公网域名 A 查询 UDP / TCP 均有答案。
+- HTTPS 补充验收通过：临时静态 Go helper 在 shell UID 使用 VPN DNS 解析 `example.com`，经所选安卓出口取得真实 HTTPS 200 页面，返回 577 字节；使用模拟器系统 CA，证书链和主机名验证均通过。没有设置代理或跳过 TLS 验证，探针不在 APK 内，结束移除。
 - 出口有实际解密 / 转发流量，ACL、来源和解密丢弃计数为零；撤销出口后 DNS 为 SERVFAIL、公网 HTTP 无响应，客户端 generation 保持不变，没有通过直连伪造成功。
 - Flutter analyze / 41 项普通测试、Rust fmt / clippy / 43 项普通测试、Go fixture test-race / vet / build-race 和 Linux 真实 netns 回归通过。
 - 扩展回归 `XUNARA_TEST_PUBLIC_DNS=true XUNARA_TEST_PHONE_ROUTER=true XUNARA_TEST_RELEASE_APK=... scripts/test-android-vpn.sh` 完整通过：真实 DoH / DoT、DNSSEC 正反例、官方出口、手机双栈 TCP / UDP / ICMP、ACL / 路由撤销以及实际混淆 Release 升级后的双栈 TCP / 系统 MagicDNS。
