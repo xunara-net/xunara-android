@@ -4,6 +4,8 @@
 
 **当前为测试预览版，不是完整替代官方客户端的正式发行版。** 支持 Android 8.0+、ARM64 / x86_64。APK 下载见 [Releases](https://github.com/xunara-net/xunara-android/releases)，安装前对照同版本 `SHA256SUMS`。预览包使用测试签名，不承诺跨 CI 构建直接覆盖安装；正式发布前需配置长期维护的私有签名。
 
+`0.5.2` 修正已复现的单向 UDP 直连误判：收到请求不再无限续期失效的回程，探测过期或本地 UDP 发送错误时回退同一设备的加密 DERP。**作为出口的手机也必须更新，建议两端覆盖升级**，不要卸载或清除机器身份。该修复有隔离网络回归，不等于已验证所有真机；指定手机的现网恢复仍需升级后实测。
+
 <p>
   <img src="docs/screenshots/connect.png" width="240" alt="连接首页" />
   <img src="docs/screenshots/devices.png" width="240" alt="设备页面" />

@@ -16,6 +16,18 @@ TS2021 / Noise / WireGuard / Disco / STUN / DERP
 
 Flutter 不实现 WireGuard、不创建机器身份、不保存 Auth Key，也不根据按钮点击直接切换成「已连接」。Kotlin 不实现控制面协议、ACL 或密钥派生。Rust 核心仓库不依赖 GUI / JNI，平台依赖方向始终朝向 `mobile::Host` 接口。
 
+## Android 上游网络路径核查
+
+对照官方 Android 源码快照 `264102cc702fbd844e900227ee02e5cbb4d7f801`：
+[App.bindSocketToNetwork](https://github.com/tailscale/tailscale-android/blob/264102cc702fbd844e900227ee02e5cbb4d7f801/android/src/main/java/com/tailscale/ipn/App.kt#L510)
+使用 `ParcelFileDescriptor.fromFd` 复制借用的描述符，再调用 `Network.bindSocket`；
+[IPNService.newBuilder](https://github.com/tailscale/tailscale-android/blob/264102cc702fbd844e900227ee02e5cbb4d7f801/android/src/main/java/com/tailscale/ipn/IPNService.kt#L192)
+同时声明 VPN 的底层网络。`protect` 避免流量重入自身 VPN，不应被当成物理网络绑定的替代。
+
+当前 Kotlin 仍采用逐 socket 保护与切网后整体断开重建的生命周期，不提供独立的物理网卡绑定开关。显式绑定必须与初始网络回调、现有 fd 重绑及 TUN 重建一起验证，不能只把官方一个方法接上就认为完整；本轮未合入存在回归的绑定候选，实际修复位于独立 Rust 内核的双向路径确认与 DERP 回退。
+
+继续保留已有逐 socket 保护和失败关闭，不照抄官方保护失败后仍继续的 best-effort 行为，也不按进程绑定网络或改写系统默认路由。绑定成功不代表真实出口公网转发成功；控制面在线、路由已批准和隧道 ICMP 回应都不能代替 DNS / HTTPS 验收。
+
 ## Why
 
 安卓不是把 Linux 可执行文件直接改名成 `.so`。系统授权后才能创建 VPN；所有外层 TCP / UDP / ICMP socket 都必须保护，TUN 的地址 / 路由需要通过 Builder 安装。独立 Flutter 产品层同时避免把 Linux CLI 做成大而全的移动管理平台。

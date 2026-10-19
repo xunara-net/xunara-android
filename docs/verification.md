@@ -384,3 +384,30 @@ ARM64 物理手机、厂商后台和真实蜂窝网络仍需升级后复测，�
 - 对照测试中，同一预解析 HTTPS 目标在宿主直连可取得验证过的 HTTPS 200；生产 DERP 的 TCP / TLS 指纹校验、HTTP Upgrade 和服务端握手头通过。这些只证明各自测试边界，不等于出口手机的转发或外网 socket 正常。
 - Android 诊断采集正常结束只表示状态已采集，未将外部请求失败改判为业务通过。需要结合出口手机本机的共享页面和脱敏诊断确认实际转发状态、应用版本及系统网络限制，现网故障尚未确认根因或根治。
 - 本地 Rust fmt / clippy / 44 项普通测试、两项显式官方兼容向量、Go helper test-race / vet / 构建、真实 Linux TUN 专项通过；Flutter analyze / 41 项普通测试、原生 3 项生命周期测试、Kotlin 28 项测试及 Debug lint 通过。它们验证各自隔离边界，不能覆盖本次仍失败的真机出口上网结果。
+
+## 2026-10-20：0.5.2 对照官方源码修正单向 UDP 回退
+
+### What changed
+
+固定 Rust 内核至 `ae6086e7f7b770931349d0500cd3e9dc5fe7f367`。有 Disco 的对端只以目标、事务、时限均匹配的 Pong 确认直连，使用后消费事务，信任窗口对齐上游 6.5 秒；纯 WireGuard 对端保留 5 秒的已认证源地址学习。明确的本地 UDP 发送错误立即尝试同一 peer 的 DERP，状态展示复用同一判定。版本为 `0.5.2+9`，实际 ARM64 / x86_64 versionCode 为 `2009` / `4009`。
+
+### Why
+
+按用户建议检出官方 `tailscale-android` 快照 `264102cc702fbd844e900227ee02e5cbb4d7f801`，追踪 Kotlin、JNI、netns 和 magicsock 数据流。旧内核每收到已认证 WireGuard 就把该 UDP 回程续期 25 秒，单向 UDP 下会收到请求却持续向不可达地址回包。独立 namespace 内静默丢弃路由端出站 UDP，旧内核的有界回退断言实际失败，修正后同一规则通过。
+
+### Compatibility impact
+
+不改变控制面、协议 wire、DNS 配置、出口批准、身份目录或迁移。只修正独立 Rust 数据面的本地路径选择，Android 固定源提交后重建原生库。初步物理网络绑定与首次注册快照收紧方案出现回归，已完全撤回 Kotlin 改动及辅助类，没有保留实验分支或隐藏开关；源码差异不能直接当成真机故障根因。
+
+### Security impact
+
+保留逐 socket protect、机器身份、来源、ACL、出口失效关闭及 DNS / TLS 校验。回退是同一对端内的加密传输选择，不允许改用其他出口或公网直连；测试丢包规则仅在隔离 namespace 建立和删除。本轮未登录生产账号、修改真实手机、远端路由或服务器配置。预览包继续使用原测试签名，覆盖升级保留账号和私钥。
+
+### Tests
+
+- Rust fmt / clippy / 47 项普通测试、两项官方兼容向量及 ARM64 Android clippy 通过；新增事务、目标、过期和重放边界，以及纯 WireGuard 兼容测试。
+- 真实 Linux TUN、官方 tsnet 双向通信、ACL、独立子网、单向静默 UDP 丢弃、双向 UDP 阻断后 DERP 回退及恢复通过；SNAT、退出清理和已有表保护通过。回退断言限制恢复窗口，不靠等待旧缓存自然超时掩盖问题。
+- 更新后两台 Android 36 模拟器之间的实际公网 IPv4 HTTP、VPN DNS UDP / TCP、正常主机名和系统 CA 校验的 HTTPS 页面通过；撤销出口后 DNS / 公网失败关闭，未错误更换连接 generation。
+- 完整扩展回归通过：MagicDNS、DoH / DoT、DNSSEC、切网与应用分流、手机双栈 TCP / UDP / ICMP、ACL / 批准撤销、同控制器账号隔离和跨租户共享。实际混淆 Release 同签名覆盖升级后，无接入密钥复用原身份连接，双栈 TCP、MagicDNS、共享页面及停止清理通过。
+- Flutter analyze / 41 项普通测试、原生 fmt / clippy / 3 项生命周期、Kotlin 28 项及 Debug / Release lint 通过；两种 ABI 的 Release JNI、签名、版本与 16 KiB 对齐校验通过。Rust 核心的 GitHub core / android-platform CI 完成且成功，包含静态 Linux 构建及隔离网络回归。
+- 这些结果证明已复现的路径选择缺陷得到修正，不等于 NX769J 真机已恢复；指定出口的真实蜂窝网络与厂商后台仍需升级后实测。
