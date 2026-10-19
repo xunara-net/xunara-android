@@ -290,3 +290,33 @@ ARM64 物理手机、各厂商后台和物理移动网络仍需真机验收，�
 ### 尚未完成
 
 完整 Tailnet Lock 的本机信任根、AUM 链、签名 / 轮换 / 撤销和持久恢复仍需实现；不提供虚假开关。ARM64 物理手机、厂商省电和长期后台、真实蜂窝漫游、Android UDP 直连与长期正式签名仍需单独验收。严格私人 DNS / 任意应用 DoH 只能检测和引导，不能在不破解 TLS 的前提下透明强制改写。
+
+## 2026-10-19：双安卓公网出口复测
+
+### What changed
+
+新增 `integration_test/exit_pair_test.dart` 和 `scripts/test-android-exit-pair.sh`：两台独立安卓身份接入隔离控制面，真实申请、批准并选用手机出口；普通 UID 验证公网 IP / HTTP、真实公网 DNS UDP / TCP 和撤销后的失败关闭。DNS 检查器新增不依赖 CDN 固定地址的 ANSWER 检查。
+
+### Why
+
+官方 tsnet 与单台安卓之间的回归不能替代“安卓使用另一台安卓出口”的公网测试。此次专项模拟默认 ACL 和公网 DNS 配置，区分控制面配置、WireGuard 数据面和实际物理网络的故障。
+
+### Compatibility impact
+
+只修改测试和验收文档，不改变 APK、协议字段、路由授权、DNS 转发或生产 ACL，不发布未经验证的新客户端版本。测试内核仍为 `00c8e9f64fce34878c5d860be1cc597f2f28a868`，控制面为 `fabf0991cdf27c8bff927f7928f4c8806d8a59c2`。
+
+### Security impact
+
+无认证的 fixture 审批入口只在 rootless user / network namespace 中启动，宿主代理仅绑定回环。接入密钥经 stdin 进入私有缓存，不进 URL、argv、APK 或 Git。升级前核对原签名，保留原账号与私钥，结束恢复偏好和原 APK；不使用线上平台令牌，不修改现网租户配置。
+
+### Tests
+
+- 两台未 Root Android 36 x86_64 模拟器实际通过：出口双栈获批、客户端 DNS 接管、普通 UID 经安卓出口访问 `1.1.1.1:80` 并取得真实 HTTP 响应，公网域名 A 查询 UDP / TCP 均有答案。
+- 出口有实际解密 / 转发流量，ACL、来源和解密丢弃计数为零；撤销出口后 DNS 为 SERVFAIL、公网 HTTP 无响应，客户端 generation 保持不变，没有通过直连伪造成功。
+- Flutter analyze / 41 项普通测试、Rust fmt / clippy / 43 项普通测试、Go fixture test-race / vet / build-race 和 Linux 真实 netns 回归通过。
+- 扩展回归 `XUNARA_TEST_PUBLIC_DNS=true XUNARA_TEST_PHONE_ROUTER=true XUNARA_TEST_RELEASE_APK=... scripts/test-android-vpn.sh` 完整通过：真实 DoH / DoT、DNSSEC 正反例、官方出口、手机双栈 TCP / UDP / ICMP、ACL / 路由撤销以及实际混淆 Release 升级后的双栈 TCP / 系统 MagicDNS。
+- 首轮扩展回归在错误签名域名的 TCP 查询中出现一次无响应，现场曾发生重连；未改生产代码的完整复测通过，但不将首轮失败改判为成功，也不据此认定现网故障根因。模拟器同时冷启动等实验室物理网络变化不能替代真机现场诊断。
+
+### 尚未确认
+
+双安卓专项使用 Debug 入口，不代表 ARM64 物理手机、厂商后台、实际蜂窝网络或双安卓 Release 全部通过。实验室成功不等于现网问题已修复；现场仍需两台设备同时在线，核对实际 APP 版本、出口选择、后台限制和两端运行诊断。

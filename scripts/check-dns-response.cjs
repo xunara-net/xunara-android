@@ -18,6 +18,8 @@ if (expected === 'SECURE') {
   assert.ok(bytes.readUInt16BE(6) > 0, 'validated DNS answer missing');
 } else if (!(expected in codes)) {
   assert.ok(bytes.readUInt16BE(6) > 0, 'DNS answer missing');
-  const address = Buffer.from(expected.split('.').map(Number));
-  assert.ok(bytes.includes(address), 'expected address missing');
+  if (expected !== 'ANSWER') {
+    const address = Buffer.from(expected.split('.').map(Number));
+    assert.ok(bytes.includes(address), 'expected address missing');
+  }
 }

@@ -41,3 +41,15 @@ XUNARA_TEST_SHARING=true sh scripts/test-android-vpn.sh emulator-5580
 脚本保留原账号目录与私钥，备份 / 恢复偏好，并只清理本轮端口和临时标记。不用 App 自身被 VPN 豁免的请求冒充远端转发。实际通过项目、安装包源提交及物理手机限制以 `verification.md` 的最新版本记录为准。
 
 本机排障可额外设置 `XUNARA_TEST_PAUSE_ON_FAILURE=true`，断言失败时保留现场 45 秒后清理，最终仍返回失败。临时快照不包含授权 URL；不要把包含测试身份文件的私有目录整体上传为公开构建产物。
+
+## 双安卓公网出口专项
+
+```sh
+sh scripts/test-android-exit-pair.sh emulator-5580 emulator-5584
+```
+
+需要两台已启动、同测试签名且已初始化应用的专用未 Root 模拟器，以及重新构建的 Go compat fixture。脚本预检原 APK 的签名，不卸载、清空或覆盖不同签名的旧应用；应为这种情况另建模拟器。
+
+一台提供出口，另一台明确选用该出口。隔离控制面使用默认 ACL 和 `114.114.114.114` / `1.1.1.1`，普通 shell UID 直接请求公网 IPv4 HTTP、经 VPN DNS 查询真实公网域名的 UDP / TCP 响应。最后撤销出口，确认 DNS 返回 SERVFAIL、公网请求不能直连，客户端 generation 不变；不能只凭 App 显示“出口可用”算通过。
+
+该专项安装 Debug 集成入口，使用与预览包相同的原生内核，不冒充 ARM64 真机或双安卓 Release 验收。结束恢复原偏好及原 APK，保留账号私钥，清除专项私有缓存。私有日志只适合本机排障，不要整体上传其中的 fixture 身份目录。
