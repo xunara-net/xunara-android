@@ -101,9 +101,9 @@ class UnderlayMonitor(context: Context, private val handler: Handler, private va
             val address = it.address
             if (address is Inet4Address && !address.isLoopbackAddress && !address.isLinkLocalAddress && !address.isAnyLocalAddress) address.hostAddress else null
         }.distinct().sorted().take(32)
-        val fingerprint = "${selected?.key?.networkHandle}:" + physical.joinToString(";") { (network, entry) ->
-            "${network.networkHandle}/${entry.properties?.interfaceName}/${entry.properties?.linkAddresses?.map { it.toString() }?.sorted()}"
-        } + ":$local"
+        // 后台蜂窝失去 FOREGROUND 不等于当前 Wi-Fi 切网；仍比较全部 LAN，避免漏掉真正的新网段。
+        val fingerprint = UnderlayFingerprint.of(selected?.key?.networkHandle, selected?.value?.properties?.interfaceName,
+            selected?.value?.properties?.linkAddresses?.map { it.toString() } ?: emptyList(), local)
         val previous = snapshot
         snapshot = Snapshot(fingerprint, local, addresses, label, usable.isNotEmpty(), selected?.value?.properties?.dnsServers?.map(NetworkAddress::resolver) ?: emptyList())
         if (previous != snapshot) changed()

@@ -1,7 +1,7 @@
 name: xunara_android
 description: 玄序 Android 私有组网客户端，Flutter 界面与 Rust 数据面。
 publish_to: none
-version: 0.5.3+10
+version: 0.5.4+11
 environment:
   sdk: ^3.13.5
 dependencies:

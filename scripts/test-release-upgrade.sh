@@ -18,9 +18,12 @@ expected=$(sha256sum "$package" | awk '{print $1}')
 actual=$("$adb" -s "$serial" shell sha256sum "$installed" | awk '{print $1}')
 [ "$expected" = "$actual" ] || { echo '已安装 APK 与待发布文件不一致。' >&2; exit 1; }
 "$adb" -s "$serial" shell am start -n net.xunara.android/.MainActivity >/dev/null
+window() {
+    "$adb" -s "$serial" shell 'uiautomator dump /data/local/tmp/xunara-release-window.xml >/dev/null 2>&1 && cat /data/local/tmp/xunara-release-window.xml' >"$1" 2>>"$directory/release-window-errors.log"
+}
 press() {
     for attempt in $(seq 1 30); do
-        "$adb" -s "$serial" shell 'uiautomator dump /data/local/tmp/xunara-release-window.xml >/dev/null 2>&1; cat /data/local/tmp/xunara-release-window.xml' >"$directory/release-window.xml"
+        if ! window "$directory/release-window.xml"; then sleep 0.3; continue; fi
         point=$(node - "$directory/release-window.xml" "$1" <<'NODE'
 const fs = require('fs');
 const nodes = [...fs.readFileSync(process.argv[2], 'utf8').matchAll(/<node\s+[^>]+>/g)];
@@ -67,12 +70,13 @@ grep -F "$router_ip" "$directory/release-magicdns.log" >/dev/null
 press '设置'
 sleep 1
 press '共享本机网络'
+forwarding_ready=false
 for attempt in $(seq 1 20); do
-    "$adb" -s "$serial" shell 'uiautomator dump /data/local/tmp/xunara-release-window.xml >/dev/null 2>&1; cat /data/local/tmp/xunara-release-window.xml' >"$directory/release-forwarding-window.xml"
-    if grep -Fq '保存并应用' "$directory/release-forwarding-window.xml"; then break; fi
-    [ "$attempt" -lt 20 ] || { echo '共享页面未完成导航，不能用设置列表截图冒充。' >&2; exit 1; }
+    if ! window "$directory/release-forwarding-window.xml"; then sleep 0.2; continue; fi
+    if grep -Fq '保存并应用' "$directory/release-forwarding-window.xml"; then forwarding_ready=true; break; fi
     sleep 0.2
 done
+[ "$forwarding_ready" = true ] || { echo '共享页面未完成导航，不能用设置列表截图冒充。' >&2; exit 1; }
 "$adb" -s "$serial" exec-out screencap -p >"$directory/release-forwarding.png"
 "$adb" -s "$serial" shell am force-stop net.xunara.android
 attempt=0

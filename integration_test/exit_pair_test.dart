@@ -17,11 +17,22 @@ void main() {
     final settings = jsonDecode(await settingsFile.readAsString()) as Map;
     await settingsFile.delete();
     final isExit = settings['role'] == 'exit';
+    final profileId = settings['profile_id'] as String;
+    expect(
+      profileId,
+      matches(
+        r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$',
+      ),
+    );
     final secretFile = File('$cache/exit-pair-auth-key');
     var authKey = (await secretFile.readAsString()).trim();
     await secretFile.delete();
     final gateway = AndroidVpnGateway();
-    await gateway.bootstrap();
+    final original = await gateway.bootstrap();
+    expect(
+      original.profiles.any((profile) => profile.id == profileId),
+      isFalse,
+    );
     await gateway.disconnect();
 
     Future<VpnSnapshot> until(bool Function(VpnSnapshot) condition) async {
@@ -49,6 +60,7 @@ void main() {
       await until((state) => state.phase == ConnectionPhase.disconnected);
       var profile = await gateway.saveProfile(
         ClientProfile(
+          id: profileId,
           server: 'http://127.0.0.1:18080/',
           hostname: isExit ? 'android-pair-exit' : 'android-pair-client',
           acceptRoutes: true,

@@ -292,6 +292,7 @@ class VpnSnapshot {
     this.forwardingApproved = const [],
     this.forwardingFlows = 0,
     this.packetCounters,
+    this.homeRelayRegion,
   });
   factory VpnSnapshot.fromJson(Map<String, dynamic> json) {
     final status = json['status'] as Map<String, dynamic>? ?? {};
@@ -336,6 +337,7 @@ class VpnSnapshot {
           .cast<String>(),
       forwardingFlows: forwarding['flows'] as int? ?? 0,
       packetCounters: _parsePacketCounters(status['receive_stats']),
+      homeRelayRegion: _parseHomeRelayRegion(status['relay']),
     );
   }
   final ConnectionPhase phase;
@@ -363,6 +365,21 @@ class VpnSnapshot {
   final List<String> forwardingApproved;
   final int forwardingFlows;
   final Map<String, int>? packetCounters;
+  final int? homeRelayRegion;
+}
+
+int? _parseHomeRelayRegion(dynamic raw) {
+  if (raw is! Map) return null;
+  final region = raw['home_region'];
+  final connected = raw['connected'];
+  if (region is! int ||
+      region < 0 ||
+      region > 65535 ||
+      connected is! bool ||
+      connected != (region > 0)) {
+    return null;
+  }
+  return region;
 }
 
 String expiryLabel(String? raw) {

@@ -27,9 +27,15 @@ class NetworkAddressTest {
         val prefix = NetworkAddress.prefix(address, 64)
         assertFalse(prefix.contains('%'))
         assertTrue(prefix.endsWith("/64"))
-        assertArrayEquals(address.address, InetAddress.getByName(prefix.substringBefore('/')).address)
+        assertArrayEquals(InetAddress.getByName("fe80::").address, InetAddress.getByName(prefix.substringBefore('/')).address)
     }
     @Test fun rejectImpossiblePrefixLengths() {
         assertTrue(runCatching { NetworkAddress.prefix(InetAddress.getByName("10.0.0.1"), 128) }.isFailure)
+    }
+    @Test fun prefixClearsHostBitsWithoutChangingDnsHostAddresses() {
+        assertEquals("10.79.16.0/20", NetworkAddress.prefix(InetAddress.getByName("10.79.25.3"), 20))
+        assertEquals("0.0.0.0/0", NetworkAddress.prefix(InetAddress.getByName("10.79.25.3"), 0))
+        val ipv6 = InetAddress.getByName("fd7a:115c:a1e0::1234")
+        assertArrayEquals(ipv6.address, InetAddress.getByName(NetworkAddress.prefix(ipv6, 128).substringBefore('/')).address)
     }
 }

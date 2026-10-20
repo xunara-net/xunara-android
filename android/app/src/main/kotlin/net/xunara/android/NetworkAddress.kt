@@ -15,7 +15,13 @@ internal object NetworkAddress {
     fun prefix(address: InetAddress, length: Int): String {
         require(length in 0..address.address.size * 8)
         // IPv6 的 %wlan0 / 数值 scope 只供系统选接口，不属于网段本身。
-        val host = checkNotNull(address.hostAddress).substringBefore('%')
+        val bytes = address.address.clone()
+        for (index in bytes.indices) {
+            val bits = (length - index * 8).coerceIn(0, 8)
+            val mask = (0xff shl (8 - bits)) and 0xff
+            bytes[index] = (bytes[index].toInt() and mask).toByte()
+        }
+        val host = checkNotNull(InetAddress.getByAddress(bytes).hostAddress)
         return "$host/$length"
     }
 }

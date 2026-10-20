@@ -176,7 +176,7 @@ fn run(
         let config = Arc::new(config);
         let store = Store::open(&config.state_dir)?;
         let identity = Arc::new(store.identity(&config.server)?);
-        let (endpoints, receiver) = watch::channel(Vec::new());
+        let (endpoints, receiver) = watch::channel(Default::default());
         let mut engine = Engine::new(config.clone(), identity.clone(), endpoints).await?;
         let (commands, requests) = mpsc::channel(4);
         engine.enable_diagnostics(requests);

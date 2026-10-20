@@ -209,6 +209,22 @@ fetch 192.168.90.2 8088 >"$directory/restored-subnet.log"
 grep -q xunara-core-ok "$directory/restored-subnet.log"
 printf 'PASS 所选应用消失时失败关闭，恢复全部应用后 TCP / 子网恢复\n'
 "$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-routing-restored-verified
+wait_marker background-ready
+"$adb" -s "$serial" shell svc data disable
+attempt=0
+while :; do
+    "$adb" -s "$serial" shell dumpsys connectivity >"$directory/background-cellular-lost.log"
+    if ! grep -q '^[[:space:]]*NetworkAgentInfo.*ni{MOBILE.*CONNECTED' "$directory/background-cellular-lost.log"; then break; fi
+    attempt=$((attempt+1)); [ "$attempt" -lt 60 ] || { echo '测试蜂窝网络没有真正退出。' >&2; exit 1; }; sleep 0.5
+done
+sleep 2
+"$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-background-lost
+wait_marker background-stable
+"$adb" -s "$serial" shell svc data enable
+sleep 3
+"$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-background-restored
+wait_marker background-complete
+printf 'PASS Wi-Fi 上后台蜂窝退出与恢复不重启 VPN，原隧道与 ICMP 继续可用\n'
 wait_marker dns-ready
 dns_ip=$("$adb" -s "$serial" shell run-as net.xunara.android cat cache/integration-dns-ready | jq -r .dns)
 "$adb" -s "$serial" shell ping -c 1 -W 4 rust-router.core.test >"$directory/magicdns-system.log"

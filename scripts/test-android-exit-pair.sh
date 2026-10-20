@@ -93,7 +93,8 @@ for serial in "$exit_serial" "$client_serial"; do
     "$adb" -s "$serial" exec-out run-as net.xunara.android cat shared_prefs/profile.xml >"$directory/$serial-profile.xml"
     "$adb" -s "$serial" shell "run-as net.xunara.android sh -c 'for file in cache/exit-pair-*; do if [ -f \"\$file\" ]; then rm \"\$file\"; fi; done'"
     if [ "$serial" = "$exit_serial" ]; then role=exit; else role=client; fi
-    printf '{"role":"%s"}' "$role" | "$adb" -s "$serial" shell "run-as net.xunara.android sh -c 'umask 077; cat > cache/exit-pair-settings'"
+    profile_id=$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')
+    printf '{"role":"%s","profile_id":"%s"}' "$role" "$profile_id" | "$adb" -s "$serial" shell "run-as net.xunara.android sh -c 'umask 077; cat > cache/exit-pair-settings'"
     "$adb" -s "$serial" shell "run-as net.xunara.android sh -c 'umask 077; cat > cache/exit-pair-auth-key'" <"$directory/auth-key"
     for port in 18080 18081; do "$adb" -s "$serial" reverse "tcp:$port" "tcp:$port" >/dev/null; done
     flutter test integration_test/exit_pair_test.dart -d "$serial" --no-uninstall --timeout 10m >"$directory/$serial-integration.log" 2>&1 & pids="$pids $!"
@@ -128,6 +129,21 @@ http_probe() { "$adb" -s "$client_serial" shell "printf 'GET /cdn-cgi/trace HTTP
 http_probe >"$directory/public-ip-http.log"
 grep -q '^HTTP/1.[01] ' "$directory/public-ip-http.log"
 printf 'PASS 普通 UID 经安卓出口直接访问公网 IPv4 / HTTP\n'
+if [ "${XUNARA_TEST_UNREACHABLE_DERP:-false}" = true ]; then
+    for serial in "$exit_serial" "$client_serial"; do
+        attempt=0
+        while :; do
+            snapshot "$serial" >"$directory/$serial-home.json"
+            jq -e '.status.relay.home_region == 900 and .status.relay.connected' "$directory/$serial-home.json" >/dev/null && break
+            attempt=$((attempt+1)); [ "$attempt" -lt 60 ] || { echo '安卓仍使用不可达的首个中继。' >&2; exit 1; }; sleep 0.5
+        done
+    done
+    for host in android-pair-exit android-pair-client; do
+        curl --noproxy '*' --max-time 5 -fsS "http://127.0.0.1:18080/_test/node?host=$host" >"$directory/$host-home.json"
+        jq -e '.home_derp == "900"' "$directory/$host-home.json" >/dev/null
+    done
+    printf 'PASS 首个中继不可达：两台安卓均确认并向控制面发布可用的 home 900\n'
+fi
 dns_query() {
     protocol=$1
     expected=$2

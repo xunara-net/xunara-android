@@ -81,6 +81,11 @@ class SystemDiagnostics {
     '网络 DNS：${profile.acceptDns ? '已保存开启' : '未单独开启'} · 内核 DNS ${snapshot.dnsActive ? '已启用' : '未报告启用'}',
     '本机提供出口：${profile.advertiseExit ? '已请求' : '未请求'} · 本次转发${snapshot.forwardingActive ? '已启用' : '未报告启用'}',
     '可见设备：${snapshot.devices.length} · 跳过冲突路由：${snapshot.skippedRoutes.length}',
+    '本机中继：${snapshot.homeRelayRegion == null
+        ? '内核未提供有效连接确认'
+        : snapshot.homeRelayRegion == 0
+        ? '尚未确认可用中继，直连可能仍可用'
+        : '区域 ${snapshot.homeRelayRegion} 已通过连接心跳，不代表出口业务可用'}',
     '发送 ${formatBytes(snapshot.bytesSent)} · 接收 ${formatBytes(snapshot.bytesReceived)}',
     if (snapshot.packetCounters == null)
       '数据包统计：内核未提供有效统计，不按零丢包处理'

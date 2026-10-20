@@ -161,4 +161,35 @@ void main() {
       );
     }
   });
+
+  test('本机中继只接受一致的区域编号与连接确认，不把旧内核当作已连接', () {
+    for (final raw in [
+      null,
+      'invalid',
+      {},
+      {'home_region': 900},
+      {'home_region': 0, 'connected': true},
+      {'home_region': 900, 'connected': false},
+      {'home_region': '900', 'connected': true},
+      {'home_region': -1, 'connected': false},
+      {'home_region': 65536, 'connected': true},
+    ]) {
+      expect(
+        VpnSnapshot.fromJson({
+          'status': {'relay': raw},
+        }).homeRelayRegion,
+        isNull,
+      );
+    }
+    for (final region in [0, 900]) {
+      expect(
+        VpnSnapshot.fromJson({
+          'status': {
+            'relay': {'home_region': region, 'connected': region > 0},
+          },
+        }).homeRelayRegion,
+        region,
+      );
+    }
+  });
 }

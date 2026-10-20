@@ -285,6 +285,7 @@ void main() {
         reconnects: 2,
         dnsActive: true,
         exitNodeAvailable: true,
+        homeRelayRegion: 900,
         packetCounters: {'tun_packets': 8, 'source_drops': 3, 'private-id': 9},
       ),
       gateway.profile.copyWith(
@@ -296,6 +297,7 @@ void main() {
     expect(report, contains('已选择'));
     expect(report, contains('匹配，不代表已出网'));
     expect(report, contains('内核 DNS 已启用'));
+    expect(report, contains('区域 900 已通过连接心跳，不代表出口业务可用'));
     expect(report, contains('对端来源不匹配丢弃：3'));
     for (final value in [
       'private-exit-id',
@@ -307,6 +309,7 @@ void main() {
     }
     final unknown = diagnostics.report(const VpnSnapshot(), gateway.profile);
     expect(unknown, contains('不按零丢包处理'));
+    expect(unknown, contains('内核未提供有效连接确认'));
     expect(unknown, isNot(contains('解密失败：0')));
   });
 

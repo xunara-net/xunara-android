@@ -57,6 +57,11 @@ void main() {
       'routing-excluded-verified',
       'routing-restored',
       'routing-restored-verified',
+      'background-ready',
+      'background-lost',
+      'background-stable',
+      'background-restored',
+      'background-complete',
       'dns-ready',
       'dns-verified',
       'doh-ready',
@@ -310,6 +315,24 @@ void main() {
       expect(restoredRouting.addresses, connected.addresses);
       await File('$cache/integration-routing-restored').writeAsString('{}');
       await waitForMarker('routing-restored-verified');
+      final beforeBackground = await gateway.snapshot();
+      expect(beforeBackground.networkLabel, 'Wi-Fi');
+      await File('$cache/integration-background-ready').writeAsString('{}');
+      await waitForMarker('background-lost');
+      expect((await gateway.snapshot()).phase, ConnectionPhase.connected);
+      expect(
+        (await gateway.snapshot()).generation,
+        beforeBackground.generation,
+      );
+      await gateway.ping(router.id, generation: beforeBackground.generation);
+      await File('$cache/integration-background-stable').writeAsString('{}');
+      await waitForMarker('background-restored');
+      expect((await gateway.snapshot()).phase, ConnectionPhase.connected);
+      expect(
+        (await gateway.snapshot()).generation,
+        beforeBackground.generation,
+      );
+      await File('$cache/integration-background-complete').writeAsString('{}');
       await gateway.disconnect();
       await waitFor(gateway, ConnectionPhase.disconnected);
       await gateway.saveProfile(testProfile.copyWith(acceptDns: true));
