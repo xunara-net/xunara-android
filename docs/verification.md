@@ -454,7 +454,7 @@ Rust 内核保持 `ae6086e`，不改变 TS2021、Noise、WireGuard、Disco、DNS
 - Flutter `0.5.2` 的真实页面控制器完成普通接入 → 停止旧 VPN → 保存出口 → 重连。
   普通 shell UID `2000` 的预解析 IPv4 HTTPS、经 VPN DNS 的 HTTPS、DNS UDP / TCP
   通过；TLS 校验系统 CA 和原主机名。业务期间 TUN 增加 128 包、DNS 增加 15 次，
-  加密接收增加 19171 字节、发送增加 11419 字节。来源 / 目标 / ACL / 解密错误计数
+  隧道接收增加 19171 字节、发送增加 11419 字节。来源 / 目标 / ACL / 解密错误计数
   为零，但另有无效包和本机来源丢弃，不宣称所有丢包为零。
 - 首轮独立夹具没有显式 TCP 转发，后续预飞又发现 root UID / 执行权限不合要求，
   均未当成有效业务通过或产品故障证据。修正夹具与测试条件后重新执行完整流程。
@@ -468,3 +468,7 @@ Rust 内核保持 `ae6086e`，不改变 TS2021、Noise、WireGuard、Disco、DNS
   28 项 Kotlin 单测通过。两种 ABI 的 Rust `.so` 与 `0.5.2` 逐字节一致，没有混入
   未验证的数据面改动；同测试签名的 `0.5.2 → 0.5.3` 覆盖升级保留配置和本轮机器
   身份。实际 x86_64 Release 已打开诊断页面并核对 `0.5.3` 版本。
+- 已发布 [v0.5.3-preview.1](https://github.com/xunara-net/xunara-android/releases/tag/v0.5.3-preview.1)，
+  源提交 `e7d0b91`，两种 ABI APK、`BUILD.json` 与 `SHA256SUMS` 从 GitHub 实际重新
+  下载后校验通过。结束只读副本后再次启动原 AVD，仍为原 `0.5.0`，没有本轮诊断
+  身份目录；最终模拟器全部退出。发布与清理完成不代表原手机问题已经解决。
