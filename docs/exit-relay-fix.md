@@ -47,3 +47,12 @@ Android 36 x86_64、普通 shell UID 2000，使用不可达 DERP 1 和正常官�
 最终指纹修复后再次运行双安卓专项，退出码 0：两台独立 UUID 身份均向控制面发布 home 900；普通 UID 经安卓出口访问公网 IP / HTTP、DNS UDP / TCP、系统 CA / 主机名校验的 HTTPS 200（577 字节）通过，撤销后 DNS 返回 SERVFAIL、公网不直连且连接代次不变。没有用 App 自身豁免的请求冒充出口流量。
 
 Debug / Release lint 通过。集成测试曾留下测试插件的生成注册状态，直接混跑 Gradle lint 时 Release 编译拒绝该状态；经 `flutter build apk --release --target lib/main.dart` 恢复生产入口后重新验证通过，没有手改生成的 Java 文件或把测试插件带入生产包。最终 APK 检查确认正式默认控制地址来自 Kotlin DEX、诊断解析来自 AOT，不包含集成测试入口或本轮临时测试密钥；两 ABI 的原生 ELF LOAD alignment 均为 16384。
+
+## 发布与清理
+
+已发布 [v0.5.4-preview.1](https://github.com/xunara-net/xunara-android/releases/tag/v0.5.4-preview.1)，构建源为 `533a05456bc518e8147b57fb170dbfe274c52f19`、内核源为 `82109c5172a8c840609147ddca66a37a1d9e4b94`。两个 APK、BUILD.json 和 SHA256SUMS 从 GitHub 重新下载后完整校验；下载 APK 与通过最终验收的文件逐字节相同，签名再次验证通过。
+
+- ARM64 APK SHA256：`9138e9a4fba4c55d6b03b54ab13839bb193363340b52db3c215d8548d16ee098`
+- x86_64 APK SHA256：`a739492830932b49618e50244efe1c13ec4a78f01dfbeba51d0be0d254b19e12`
+
+结束全部测试服务和模拟器，删除本轮新建 AVD；原有三个 AVD 保留。清理 38 个临时凭据文件与 46 个隔离状态目录，没有删除生产设备或原有账号身份。核心提交的 GitHub CI 已通过；这些记录和文件校验仍不代表原物理手机已经恢复。
