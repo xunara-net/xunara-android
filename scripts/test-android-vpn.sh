@@ -21,6 +21,7 @@ case "$sharing" in true|false) :;; *) echo 'XUNARA_TEST_SHARING 只能为 true �
 case "$phone_router" in true|false) :;; *) echo 'XUNARA_TEST_PHONE_ROUTER 只能为 true 或 false' >&2; exit 1;; esac
 case "$public_dns" in true|false) :;; *) echo 'XUNARA_TEST_PUBLIC_DNS 只能为 true 或 false' >&2; exit 1;; esac
 case "$serial" in emulator-*) :;; *) echo '自动授权测试只允许专用模拟器，不能操作用户真机。' >&2; exit 1;; esac
+[ "$("$adb" -s "$serial" shell id -u | tr -d '\r')" = 2000 ] || { echo 'VPN 业务探针必须使用普通 shell UID；请先对专用模拟器执行 adb unroot。' >&2; exit 1; }
 for program in flutter socat unshare nsenter curl ip jq node ss; do command -v "$program" >/dev/null || { echo "缺少 $program" >&2; exit 1; }; done
 if [ ! -x "$core/target/compat-fixture" ] || [ ! -x "$core/target/debug/xunara-client" ]; then
     echo '请先构建 xunara-client 与 tests/compat Go fixture。' >&2; exit 1;

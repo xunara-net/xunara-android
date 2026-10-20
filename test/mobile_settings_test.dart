@@ -275,6 +275,41 @@ void main() {
     controller.dispose();
   });
 
+  test('诊断报告区分出口与 DNS 状态并保留真实丢包计数但不导出身份', () async {
+    final gateway = FakeGateway();
+    final diagnostics = await gateway.systemDiagnostics();
+    final report = diagnostics.report(
+      const VpnSnapshot(
+        phase: ConnectionPhase.connected,
+        generation: 4,
+        reconnects: 2,
+        dnsActive: true,
+        exitNodeAvailable: true,
+        packetCounters: {'tun_packets': 8, 'source_drops': 3, 'private-id': 9},
+      ),
+      gateway.profile.copyWith(
+        exitNodeId: 'private-exit-id',
+        exitNodeName: 'private-exit-name',
+      ),
+    );
+    expect(report, contains('连接代次：4 · 本次自动重连 2 次'));
+    expect(report, contains('已选择'));
+    expect(report, contains('匹配，不代表已出网'));
+    expect(report, contains('内核 DNS 已启用'));
+    expect(report, contains('对端来源不匹配丢弃：3'));
+    for (final value in [
+      'private-exit-id',
+      'private-exit-name',
+      'private-id',
+      gateway.profile.server,
+    ]) {
+      expect(report, isNot(contains(value)));
+    }
+    final unknown = diagnostics.report(const VpnSnapshot(), gateway.profile);
+    expect(unknown, contains('不按零丢包处理'));
+    expect(unknown, isNot(contains('解密失败：0')));
+  });
+
   testWidgets('系统诊断读取失败不把未知状态伪装成正常', (tester) async {
     final controller = AppController(_UnavailableDiagnosticsGateway());
     await controller.initialize();

@@ -6,6 +6,11 @@
 
 `0.5.2` 修正已复现的单向 UDP 直连误判：收到请求不再无限续期失效的回程，探测过期或本地 UDP 发送错误时回退同一设备的加密 DERP。**作为出口的手机也必须更新，建议两端覆盖升级**，不要卸载或清除机器身份。该修复有隔离网络回归，不等于已验证所有真机；指定手机的现网恢复仍需升级后实测。
 
+`0.5.3` 是诊断增强预览，Rust 内核仍固定至 `ae6086e`，没有声称修复尚未复现的真机出口故障。
+在「设置 → 系统与连接诊断 → 复制诊断摘要」可取得应用版本、出口 / DNS 实际状态、
+连接代次、重连次数及白名单数据包计数；不导出服务器、IP、设备名称、出口身份或密钥。
+复制前先尝试一次访问网页，保留失败时的连接。计数缺失显示未知，不假装零丢包。
+
 <p>
   <img src="docs/screenshots/connect.png" width="240" alt="连接首页" />
   <img src="docs/screenshots/devices.png" width="240" alt="设备页面" />
@@ -144,5 +149,11 @@ sh scripts/test-android-vpn.sh emulator-5580
 `integration_test/live_exit_test.dart` 只用于操作者明确授权的现网采集，不进入生产 `lib/main.dart` APK。通过 stdin 将单独签发的短期临时设备密钥写入应用私有的 `cache/live-exit-auth-key`，配置写入 `cache/live-exit-settings`，字段为 `server`、`hostname`、全新 UUID `profile_id`、指定出口的 `exit_id`。只接受 HTTPS 根地址和 `diag-` 诊断设备名，禁止复用已有配置 ID 或用户机器私钥。
 
 测试建立真实 TUN 并选择指定出口，将不含授权链接的状态与 ICMP 结果写入 `cache/live-exit-*`，等待外部普通 UID 请求实际公网 IP、VPN DNS 和 HTTPS，再以 `cache/live-exit-finish` 结束采集。**采集测试退出成功不等于出口可用**：业务结果必须以这些外部请求及实际探测结果为准，不能用 App 自身豁免 VPN 的请求或绿色连接状态代替。
+
+配置可增加 `select_after_connect: true`，通过页面实际使用的 `AppController` 先普通接入，
+再停止旧 VPN、保存出口设置并重新连接，覆盖先连接后选择出口的完整生命周期。
+外部探针必须核对 `adb shell id -u` 为 `2000`、可执行权限和 Android 系统 CA，并观察
+真实 TUN / DNS / 加密收发计数增长。root shell、绕过 VPN 的 App 请求、探针未执行或
+只有连接状态均不能计为业务通过。普通回归脚本在 root adbd 下直接拒绝开始。
 
 只在专用模拟器运行并预先核对签名、备份原 APK / 偏好；结束恢复原内容，仅删除本轮 UUID 的临时身份目录，以及控制面中本轮确切的临时节点 / 密钥。不得卸载原应用、清除全部数据、撤销其他会话或改动真实出口的批准路由。

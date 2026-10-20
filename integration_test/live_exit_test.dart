@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:xunara_android/app_controller.dart';
 import 'package:xunara_android/models.dart';
 import 'package:xunara_android/vpn_gateway.dart';
 
@@ -20,6 +21,7 @@ void main() {
     final hostname = settings['hostname'] as String;
     final profileId = settings['profile_id'] as String;
     final exitId = settings['exit_id'] as String;
+    final selectAfterConnect = settings['select_after_connect'] == true;
     expect(ClientProfile.validateServer(server), isNull);
     expect(Uri.parse(server).scheme, 'https');
     expect(hostname, startsWith('diag-'));
@@ -35,6 +37,7 @@ void main() {
     var authKey = (await secretFile.readAsString()).trim();
     await secretFile.delete();
     final gateway = AndroidVpnGateway();
+    AppController? controller;
     final original = await gateway.bootstrap();
     expect(
       original.profiles.any((profile) => profile.id == profileId),
@@ -72,12 +75,28 @@ void main() {
           server: server,
           hostname: hostname,
           acceptRoutes: true,
-          acceptDns: true,
-          exitNodeId: exitId,
+          acceptDns: !selectAfterConnect,
+          exitNodeId: selectAfterConnect ? '' : exitId,
           autoReconnect: false,
         ),
       );
-      await gateway.connect(authKey: authKey);
+      if (selectAfterConnect) {
+        // 走真实页面使用的控制器：先普通连接，再停止旧 VPN、保存出口并重新连接。
+        controller = AppController(gateway);
+        await controller.initialize();
+        await controller.connect(authKey: authKey);
+        authKey = '';
+        await until((state) => state.phase == ConnectionPhase.connected);
+        await controller.refresh();
+        expect(
+          await controller.applyNetworkSettings(
+            controller.profile!.copyWith(exitNodeId: exitId),
+          ),
+          isTrue,
+        );
+      } else {
+        await gateway.connect(authKey: authKey);
+      }
       authKey = '';
       final active = await until(
         (state) =>
@@ -112,6 +131,7 @@ void main() {
     } finally {
       authKey = '';
       await gateway.disconnect();
+      controller?.dispose();
     }
   });
 }

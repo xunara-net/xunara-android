@@ -239,6 +239,32 @@ class PingResult {
   String get pathLabel => path == 'direct' ? 'UDP 直连' : 'DERP 中继';
 }
 
+const packetCounterLabels = {
+  'tun_packets': 'VPN 发出包',
+  'tun_source_drops': '本机来源不匹配丢弃',
+  'dns_queries': 'VPN DNS 查询',
+  'encrypted_packets': '收到加密包',
+  'decoded_packets': '成功解密包',
+  'decrypt_errors': '解密失败',
+  'invalid_packets': '无效包丢弃',
+  'source_drops': '对端来源不匹配丢弃',
+  'destination_drops': '目标不匹配丢弃',
+  'acl_drops': '访问策略丢弃',
+};
+
+Map<String, int>? _parsePacketCounters(Object? raw) {
+  if (raw is! Map) return null;
+  final counters = <String, int>{};
+  // 诊断只接收固定名称的非负整数，不能把任意内核字段或日志带入可复制报告。
+  for (final key in packetCounterLabels.keys) {
+    if (!raw.containsKey(key)) continue;
+    final value = raw[key];
+    if (value is! int || value < 0) return null;
+    counters[key] = value;
+  }
+  return counters.isEmpty ? null : Map.unmodifiable(counters);
+}
+
 class VpnSnapshot {
   const VpnSnapshot({
     this.phase = ConnectionPhase.disconnected,
@@ -265,6 +291,7 @@ class VpnSnapshot {
     this.forwardingActive = false,
     this.forwardingApproved = const [],
     this.forwardingFlows = 0,
+    this.packetCounters,
   });
   factory VpnSnapshot.fromJson(Map<String, dynamic> json) {
     final status = json['status'] as Map<String, dynamic>? ?? {};
@@ -308,6 +335,7 @@ class VpnSnapshot {
       forwardingApproved: (forwarding['approved'] as List? ?? [])
           .cast<String>(),
       forwardingFlows: forwarding['flows'] as int? ?? 0,
+      packetCounters: _parsePacketCounters(status['receive_stats']),
     );
   }
   final ConnectionPhase phase;
@@ -334,6 +362,7 @@ class VpnSnapshot {
   final bool forwardingActive;
   final List<String> forwardingApproved;
   final int forwardingFlows;
+  final Map<String, int>? packetCounters;
 }
 
 String expiryLabel(String? raw) {

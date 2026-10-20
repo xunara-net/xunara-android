@@ -32,6 +32,7 @@ client_serial=${2:-emulator-5582}
 for serial in "$exit_serial" "$client_serial"; do
     case "$serial" in emulator-*) :;; *) echo '不得操作物理手机。' >&2; exit 1;; esac
     [ "$("$adb" -s "$serial" get-state)" = device ] || exit 1
+    [ "$("$adb" -s "$serial" shell id -u | tr -d '\r')" = 2000 ] || { echo '出口业务探针必须使用普通 shell UID；请先对专用模拟器执行 adb unroot。' >&2; exit 1; }
     [ "$("$adb" -s "$serial" shell getprop ro.product.cpu.abi | tr -d '\r')" = x86_64 ] || { echo '本专项探针只用于 x86_64 模拟器。' >&2; exit 1; }
     for port in 18080 18081; do
         if "$adb" -s "$serial" reverse --list | grep -q "tcp:$port "; then echo '已有反向端口映射，拒绝覆盖。' >&2; exit 1; fi

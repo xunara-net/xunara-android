@@ -129,4 +129,36 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('数据包诊断只接收固定名称的非负整数且不能被调用方改写', () {
+    final snapshot = VpnSnapshot.fromJson({
+      'status': {
+        'receive_stats': {
+          'tun_packets': 17,
+          'acl_drops': 0,
+          'private-token': 99,
+        },
+      },
+    });
+    expect(snapshot.packetCounters, {'tun_packets': 17, 'acl_drops': 0});
+    expect(
+      () => snapshot.packetCounters!['tun_packets'] = 0,
+      throwsUnsupportedError,
+    );
+    for (final invalid in [
+      null,
+      'not-a-map',
+      {'tun_packets': -1},
+      {'acl_drops': 1.2},
+      {'dns_queries': '0'},
+      {'private-token': 99},
+    ]) {
+      expect(
+        VpnSnapshot.fromJson({
+          'status': {'receive_stats': invalid},
+        }).packetCounters,
+        isNull,
+      );
+    }
+  });
 }
