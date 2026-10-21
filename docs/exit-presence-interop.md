@@ -2,18 +2,21 @@
 
 ## What changed
 
-- 内核固定至 `d79c62d7fa84a57716524a1e27af0f4cfb844442`，不复制另一套控制协议。具体差异、固定上游和真实 TUN 红绿回归见[核心审计](https://github.com/xunara-net/xunara-client/blob/d79c62d7fa84a57716524a1e27af0f4cfb844442/docs/exit-return-presence.md)。
+- 内核固定至 `22d0d5b6aff7aa2db8877b982dd395ed29cdc310`，不复制另一套控制协议。具体差异、固定上游和真实 TUN 红绿回归见[核心审计](https://github.com/xunara-net/xunara-client/blob/22d0d5b6aff7aa2db8877b982dd395ed29cdc310/docs/exit-return-presence.md)。
 - 设备列表和详情显示在线、离线、未知及最近在线。未收到状态不伪装成离线，不用密钥到期时间代替最近在线；小屏状态可换行。
 - 已知离线出口禁止新选择；已保存的出口离线时保留原选择，提示检查远端，不自动换出口或直连。确认弹窗期间重新核对账号、连接代次和当前出口状态。
 - 已建立 TCP 的出口 peerapi DNS 使用十秒资源预算，未建连仍有四秒快速失败。保留固定出口，不改为手机原网络解析。
 - ICMP 错误引用必须匹配未过期的本机出站连接，仍经过 WireGuard 身份、来源、目标和地址冲突校验，不放行任意 ICMP 或重定向。
+- 中继反向路由只从已通过 WireGuard 校验的 peer 学习，绑定具体 DERP 连接；连接重建、PeerGone 和节点删除清除旧提示。正常已连接 home 仍优先，控制面 home 未同步时不再把合法回包发往区域 0。
 - 诊断区分真实 DNS 请求、生成响应、SERVFAIL、NXDOMAIN、超时与 VPN DNS 数据包。只导出白名单数字，不包含查询域名、地址、报文或凭据；代理重建后消息统计重新开始。
 
 ## Why
 
 旧模型没有保留官方 Online / LastSeen，也没有合并 OnlineChange / PeerSeenChange，单独添加 Flutter 标签无法解决状态缺失。
 旧内核还把正常的 ICMP 错误当成没有许可的新流；真实独立 LAN 的 UDP 关闭端口测试在旧二进制上只能超时，修复后收到 ECONNREFUSED。
-官方 peerapi 允许五秒解析，旧内核四秒就放弃已连接请求；真实用户态 TCP 握手后的 4.5 秒答复回归已验证修复。
+官方 peerapi 允许五秒解析，旧内核四秒就放弃已连接请求；回归完成真实用户态 TCP 握手，再把已等待时长设为 4.5 秒，验证旧版提前失败而新版交付合法答复。这不是物理链路延迟实测。
+
+扩展共享回归先发现夹具的 ICMP 来源遗漏共享别名，修正后仍无法收到回包；增加握手等待也没有解决。隔离跟踪确认请求已放行、Linux 已生成回复，但 peer 的 home 尚为 0。补齐官方已有的连接绑定反向路由后，共享双栈通信、隔离与撤销通过。跟踪代码已删除，不把局部夹具修复或中继握手冒充业务通过。
 
 这些是已复现的差异，不足以单独解释用户原手机的全部断网；不能用解密包数、DNS 包数或中继心跳宣称已出网。
 
@@ -58,7 +61,7 @@ Android 8.0+ 和 ARM64 / x86_64 保持不变，同测试签名可覆盖升级，
 - Flutter 格式、analyze、49 项模型 / Widget 测试通过，包括 360 像素列表、三态状态更新、离线出口禁选及确认期间状态变化。
 - 原生 Rust fmt / clippy / 3 项生命周期测试、ARM64 交叉 clippy、两个 ABI 原生构建和 JNI 合约 5 项测试通过。
 - Android Debug 单测与 lint 通过；没有提高最低 SDK 或关闭 lint 规避检查。
-- 核心 Rust 57 项普通测试、另行显式执行的两个上游兼容向量，Go fixture build / vet / test / race 通过。
+- 核心 Rust 59 项普通测试、另行显式执行的两个上游兼容向量，Go fixture build / vet / test / race 通过。
 - 冻结最终内核二进制的普通 / SNAT / 坏首个 DERP 真实 namespace 回归通过：官方 tsnet 双向通信、批准子网、ACL 拒绝、相关 ICMP、UDP 阻断回退与恢复；旧二进制 ICMP 测试失败，不将失败混入通过结果。
 
 最终混淆 APK、完整 Android 扩展回归和发布校验以本文件后续增量记录为准，不将 Debug 混测冒充 Release 或真机验收。

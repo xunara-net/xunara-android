@@ -68,6 +68,27 @@ Future<void> verifyDeviceSharing(
   expect(device.routes, isEmpty);
   expect(device.exitNode, isFalse);
   expect(device.addresses.any(pending.addresses.contains), isFalse);
+  final transportDeadline = DateTime.now().add(const Duration(seconds: 30));
+  while (true) {
+    final state = await gateway.snapshot();
+    expect(state.generation, accepted.generation);
+    expect(state.phase, ConnectionPhase.connected);
+    final direct = state.devices.any(
+      (peer) => peer.id == device.id && peer.path == 'direct',
+    );
+    await marker('transport', {
+      'generation': state.generation,
+      'home_relay_region': state.homeRelayRegion,
+      'direct': direct,
+      'visible_peers': state.devices.length,
+    });
+    // 授权映射先于传输握手到达；先等真实路径就绪，后面仍必须取得实际 ICMP 回包。
+    if (state.homeRelayRegion != null || direct) break;
+    if (DateTime.now().isAfter(transportDeadline)) {
+      fail('共享映射已到达，但三十秒内未建立中继或直连，不能开始业务验收');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+  }
   final ping = await gateway.ping(device.id, generation: accepted.generation);
   expect(ping.address, isNotEmpty);
   await marker('active', {'addresses': device.addresses});
