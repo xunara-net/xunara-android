@@ -278,6 +278,10 @@ const dnsCounterLabels = {
   'peer_servfail': '本机出口 DNS 失败响应',
   'nxdomain': 'DNS 无此域名响应',
   'timeouts': 'DNS 上游超时次数',
+  'connect_timeouts': 'DNS 上游建连超时',
+  'response_timeouts': 'DNS 上游响应超时',
+  'upstream_closed': 'DNS 上游提前关闭',
+  'invalid_responses': 'DNS 上游无效响应',
 };
 
 Map<String, int>? _parseCounters(Object? raw, Iterable<String> names) {

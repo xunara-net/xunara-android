@@ -22,6 +22,9 @@ void main() {
     final profileId = settings['profile_id'] as String;
     final exitId = settings['exit_id'] as String;
     final selectAfterConnect = settings['select_after_connect'] == true;
+    final reuseProfile = settings['reuse_profile'] == true;
+    final holdMinutes = settings['hold_minutes'] as int? ?? 4;
+    expect(holdMinutes, inInclusiveRange(1, 20));
     expect(ClientProfile.validateServer(server), isNull);
     expect(Uri.parse(server).scheme, 'https');
     expect(hostname, startsWith('diag-'));
@@ -34,15 +37,26 @@ void main() {
     expect(exitId, isNotEmpty);
 
     final secretFile = File('$cache/live-exit-auth-key');
-    var authKey = (await secretFile.readAsString()).trim();
-    await secretFile.delete();
+    var authKey = '';
+    if (await secretFile.exists()) {
+      authKey = (await secretFile.readAsString()).trim();
+      await secretFile.delete();
+    }
+    expect(reuseProfile || authKey.isNotEmpty, isTrue);
     final gateway = AndroidVpnGateway();
     AppController? controller;
     final original = await gateway.bootstrap();
     expect(
       original.profiles.any((profile) => profile.id == profileId),
-      isFalse,
+      reuseProfile,
     );
+    if (reuseProfile) {
+      final previous = original.profiles.singleWhere(
+        (profile) => profile.id == profileId,
+      );
+      expect(previous.hostname, hostname);
+      expect(previous.server, server);
+    }
 
     Future<VpnSnapshot> until(bool Function(VpnSnapshot) condition) async {
       final deadline = DateTime.now().add(const Duration(seconds: 90));
@@ -121,7 +135,7 @@ void main() {
         results['exit_ping_error'] = error.code;
       }
       await File('$cache/live-exit-ping').writeAsString(jsonEncode(results));
-      final deadline = DateTime.now().add(const Duration(minutes: 4));
+      final deadline = DateTime.now().add(Duration(minutes: holdMinutes));
       // 公网请求必须由 shell UID 验证；App 自身的受保护连接不算出口测试通过。
       while (!await File('$cache/live-exit-finish').exists()) {
         if (DateTime.now().isAfter(deadline)) fail('现网诊断采集超时');

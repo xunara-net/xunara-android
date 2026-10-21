@@ -22,6 +22,8 @@
 
 `0.5.8` 修复隧道 DNS 的 TCP 连接清理：旧版完成查询后仍占用出口连接额度，短时间连续解析会阻塞后续 DNS。旧内核已在真实双安卓测试中复现“少量查询正常，连续查询超时”，并非仅有界面调整。修复保留配额、ACL、固定出口、TLS 和 DNSSEC；原手机仍需覆盖安装后验收，见[连接清理记录](docs/magicdns-fix.md)。
 
+`0.5.9` 继续针对实际手机出口修复 DNS 握手预算，并补齐认证 NAT 来源的候选探测；诊断区分建连与响应阶段失败。专用模拟器已使用现网 NX769J 完成连续 64 次有效查询及八次非缓存浏览器加载。**这不等于原物理使用端已经升级或恢复，也不代表该出口已建立 UDP 直连**，详见[现网混合验收](docs/magicdns-fix.md)。
+
 <p>
   <img src="docs/screenshots/connect.png" width="240" alt="连接首页" />
   <img src="docs/screenshots/devices.png" width="240" alt="设备页面" />

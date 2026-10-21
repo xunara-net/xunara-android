@@ -1,6 +1,8 @@
-# 0.5.6 MagicDNS 与出口 DNS 验收
+# Android MagicDNS 与出口 DNS 验收
 
-## What changed
+## 0.5.6
+
+### What changed
 
 内核固定到 `607d7bc74ad6a0248d6268477bf64a026953b623`，继续使用独立 Rust 内核，不打包 Go sidecar。具体 DNS 调用链、固定官方版本与保护边界见[内核记录](https://github.com/xunara-net/xunara-client/blob/607d7bc74ad6a0248d6268477bf64a026953b623/docs/android-dns.md)。
 
@@ -10,7 +12,7 @@
 - DNS 地址冲突退避统一用于 Android 系统配置和内部代理。
 - 脱敏诊断单独列出其他设备经本机出口的 DNS 查询、生成响应和失败响应，不将其混为本机应用查询，也不导出域名或报文。
 
-## Why
+### Why
 
 0.5.5 的出口 peerapi 复用了平台 DNS，而官方 Android 的出口解析使用宿主解析能力。公网 IP 通畅不能说明手机能访问平台选择的公共 DNS。旧版还串行等待解析器，首个 DNS 黑洞会阻塞健康备用地址。
 
@@ -18,14 +20,14 @@
 
 第一次只给出测试 DNS 地址时，旧版仍解析成功，因此该轮不能作为有效负对照。随后仅对本轮专用出口模拟器的玄序 UID，阻断该测试 DNS 的 UDP / TCP 53，确认实际丢弃计数增长后再做红绿对照。规则在升级前后保持相同，没有封禁手机物理 DNS，也没有修改生产网络。
 
-## Compatibility impact
+### Compatibility impact
 
 不改服务端、租户 DNS、现有设备归属 / 审批、ACL 或官方协议。参考[官方 Android VPN DNS](https://github.com/tailscale/tailscale-android/blob/1.98.8-t1241b225b-gbcbaf1889/libtailscale/net.go)与[官方宿主出口解析](https://github.com/tailscale/tailscale/blob/v1.98.8/net/dns/resolver/tsdns.go)适配 Rust 实现，不声称已移植官方全部系统 DNS 实现。
 
 Android 8.0+、ARM64 / x86_64 不变。应用版本 `0.5.6+13`，实际 APK 版本码 ARM64 为 2013、x86_64 为 4013。签名与本地发布的 0.5.5 相同，可以覆盖安装，不卸载、不清账号 / 机器身份。
 两端均使用玄序时，两台都需升级；官方出口或使用端可以保留官方客户端。
 
-## Security impact
+### Security impact
 
 保留固定出口失败关闭、LAN 优先、来源与 ACL 校验、随机 DNS ID / 问题校验、TLS 证书与主机名验证；不硬编码额外公共 DNS、不将消费者查询直接送手机原网络。
 平台或用户加密解析与本地 DNSSEC 不降级；私有分流、MagicDNS 和权威 NXDOMAIN 不送到宿主默认 DNS。
@@ -34,7 +36,7 @@ Android 8.0+、ARM64 / x86_64 不变。应用版本 `0.5.6+13`，实际 APK 版�
 业务探针为普通 Android shell UID 2000，不用豁免 VPN 的 Flutter / 原生应用 HTTP 冒充业务。临时 DNS 丢弃规则仅由测试管理员加入专用模拟器，不给应用 root。
 生产只读取过 demo 的 DNS 配置与设备状态，临时人类会话已撤销，未修改生产设备、批准、DNS 或 ACL。
 
-## Tests
+### Tests
 
 - Rust fmt、clippy、64 项普通测试及两项显式执行的官方兼容向量；Go 隔离夹具 build / vet / test / race 通过。
 - 最终内核实际 TUN / 官方 tsnet / ACL / 子网 / UDP 阻断后 DERP 回退与恢复通过；先前同改动的 SNAT 回归也通过。
@@ -137,3 +139,36 @@ DNS 页仅展示网络配置的解析器、搜索域、分流域和启用状态�
 - 原物理手机仍需覆盖安装本版后复测；不将以上隔离测试写成真实使用端已恢复。
 - 最终混淆 Release 同签名覆盖、原身份无密钥恢复、双栈 TCP、系统 MagicDNS、真实 DNS 页面及停止清理通过；Kotlin 单测、Debug / Release lint、两 ABI 的 JNI / 签名 / 16 KiB 对齐通过。
 - 内核源提交 CI `39619538447` 通过。额外的本地 Linux musl 构建因缺少 `x86_64-linux-musl-gcc` 工具链未完成，不计入通过项；本次只发布 Android 安装包，不发布 Linux CLI 二进制。
+
+## 0.5.9：现网 NX769J 出口混合验收
+
+### What changed
+
+内核固定到 `70fcb1aac0c71b7da30ac65e680af34132364571`，出口 DNS 的 TCP 握手和响应共用每个上游尝试十秒预算；补齐认证 UDP 实际来源的短期候选探测。诊断只增加固定的建连超时、响应超时、提前关闭和无效响应计数。现网集成入口允许在专用诊断身份上无密钥重连，等待时长显式限制在一至二十分钟，不借用原用户设备身份。
+
+### Why
+
+0.5.8 的连接回收修复不是问题的全部。在专用 Android 36 x86_64 模拟器中自行注册新设备、使用现网 NX769J 出口，仍复现 `odata.cc` 系统解析失败和 SERVFAIL。同一模拟器切换官方 Android 1.98.8、选择同一出口后，Bionic/netd 解析及显式 DNS UDP / TCP 可用；NX769J 自身系统解析和验证证书的 HTTPS 也可用，没有因此修改服务端审批、ACL 或 DNS。
+
+新增统计把失败定位到上游连接阶段。先只延长预算的现网连续 64 次查询仍有一次超时，因此没有直接宣布完成。继续对照官方认证 Ping 的候选学习，补齐实际 NAT 来源的后续往返探测，并在完整修复内核上重新验收。
+
+### Compatibility impact
+
+不改服务端、数据库、账号、设备归属、批准路由、TS2021、Noise、WireGuard、DNSConfig、Disco、STUN 或 DERP wire。无需重新注册使用端或 NX769J。普通解析器短超时、LAN 优先、现有 DNS / DNSSEC 配置保留。不同地址族可能依次尝试，不将每个上游十秒错误描述成整个多地址查询总共十秒。
+
+### Security impact
+
+认证来包仍只提供候选，必须取得当前目标上新鲜、一次性且匹配源地址的 Pong 才能建立直连；候选最多八项、有效期两分钟，总探测目标不超过十六个。没有关闭 TLS、DNSSEC、浏览器安全 DNS 或出口失败关闭，也没有通过修改手机物理 DNS 绕过出口。测试密钥经独立受保护文件传入、使用后撤销，不进入 URL、进程参数、截图或 Git。
+
+### Tests
+
+- 两项核心回归先在旧行为上失败；完整内核的 Rust fmt / clippy、70 项普通测试、两项显式官方兼容向量、Go 夹具 build / vet / test / race、真实 TUN / 官方 tsnet / ACL / 子网 / 单向 UDP / DERP 回退恢复通过。
+- 现网首轮由普通 shell UID 连续查询 `odata.cc` 64 次，64 次收到有效 DNS 回答；探针核对专用 VPN 来源、事务及有效答案，不把进程退出码为零当成功。
+- Android Chrome 133 的前台标签连续加载八次目标页面，均为非缓存、非 Service Worker 的 HTTPS 200，正文实际渲染，无该次加载的网络失败事件。每次先确认活动 VPN 由预期应用拥有；未使用忽略证书或其他解析器。完整页面耗时约 41–81 秒，不能将 DNS 恢复描述为浏览体验已经与官方等速。
+- 初次自动化因操作后台冻结标签或过早读取正文而失败，这些尝试不计入产品通过或失败；将目标标签置前并等待实际页面加载后重新执行完整八次。
+- 原两台手机的账号、设备、审批、路由、DNS 和应用分流没有更改。此次是模拟器使用端与真实手机出口的混合测试，不是原物理使用端的升级验收；NX769J 在该测试仍报告中继路径，不宣称 UDP 直连已经恢复。
+
+- 冻结后的实际 Release `0.5.9+16` 同签名覆盖原模拟器应用，未提供新接入密钥，保留原设备身份；系统解析、显式 DNS UDP / TCP、连续 64 次有效答复均通过。Chrome 另做两次非缓存 HTTPS 200 与正文渲染复测，完整页面约 50–53 秒；记录中保留 `ERR_ABORTED` 事件，不将其解释为 DNS 错误或抹掉。
+- 最终 Release 两 ABI 的全部六个 JNI 回调、相同升级签名、版本号 `2016` / `4016`、ZIP 与 ELF 16 KiB 对齐通过。Flutter analyze / 51 项测试、native clippy / 3 项生命周期测试、ARM64 clippy、Kotlin 单测及 Debug / Release lint 通过。
+- 用独立双安卓与隔离控制面再次验证公网 IPv4、DNS UDP / TCP、Bionic/netd、连续 64 次查找、验证证书的 HTTPS；撤销出口后 DNS 失败关闭、公网不直连且不发生错误重连，均通过。测试结束恢复原 Release 和配置。
+- Gradle 检查曾遇到旧测试入口生成注册表残留；重新以生产 `lib/main.dart` 构建后，输出与已测 APK 逐字节相同，Gradle 检查通过，没有手工修改生成代码。核心源提交 CI `39637405662` 的 core / Android platform 两项通过。
