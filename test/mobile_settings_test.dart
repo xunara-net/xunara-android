@@ -286,6 +286,13 @@ void main() {
         dnsActive: true,
         dnssecActive: true,
         exitNodeAvailable: true,
+        forwardingActive: true,
+        forwardingFlows: 32,
+        forwardingCounters: {
+          'data_capacity_drops': 2,
+          'dns_capacity_drops': 0,
+          'private-destination': 1,
+        },
         homeRelayRegion: 900,
         packetCounters: {'tun_packets': 8, 'source_drops': 3, 'private-id': 9},
       ),
@@ -302,10 +309,14 @@ void main() {
     expect(report, contains('本机 DNSSEC：已保存开启 · 本次验证已启用'));
     expect(report, contains('区域 900 已通过连接心跳，不代表出口业务可用'));
     expect(report, contains('对端来源不匹配丢弃：3'));
+    expect(report, contains('本机转发当前连接数：32'));
+    expect(report, contains('上网转发因额度或速率限制拒绝：2'));
+    expect(report, contains('出口 DNS 因独立额度或速率限制拒绝：0'));
     for (final value in [
       'private-exit-id',
       'private-exit-name',
       'private-id',
+      'private-destination',
       gateway.profile.server,
     ]) {
       expect(report, isNot(contains(value)));
@@ -314,6 +325,7 @@ void main() {
     expect(unknown, contains('不按零丢包处理'));
     expect(unknown, contains('内核未提供有效连接确认'));
     expect(unknown, isNot(contains('解密失败：0')));
+    expect(unknown, isNot(contains('出口 DNS 因独立额度或速率限制拒绝：0')));
     expect(unknown, contains('本机 DNSSEC：未单独开启 · 本次验证未报告启用'));
   });
 

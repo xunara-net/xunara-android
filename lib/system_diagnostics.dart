@@ -87,6 +87,7 @@ class SystemDiagnostics {
     '网络 DNS：${profile.acceptDns ? '已保存开启' : '未单独开启'} · 内核 DNS ${snapshot.dnsActive ? '已启用' : '未报告启用'}',
     '本机 DNSSEC：${profile.validateDnssec ? '已保存开启' : '未单独开启'} · 本次验证${snapshot.dnssecActive ? '已启用' : '未报告启用'}',
     '本机提供出口：${profile.advertiseExit ? '已请求' : '未请求'} · 本次转发${snapshot.forwardingActive ? '已启用' : '未报告启用'}',
+    if (snapshot.forwardingActive) '本机转发当前连接数：${snapshot.forwardingFlows}',
     '可见设备：${snapshot.devices.length} · 跳过冲突路由：${snapshot.skippedRoutes.length}',
     '本机中继：${snapshot.homeRelayRegion == null
         ? '内核未提供有效连接确认'
@@ -107,6 +108,12 @@ class SystemDiagnostics {
       for (final counter in dnsCounterLabels.entries)
         if (snapshot.dnsCounters!.containsKey(counter.key))
           '${counter.value}：${snapshot.dnsCounters![counter.key]}',
+    ],
+    if (snapshot.forwardingCounters != null) ...[
+      '本次出口接入统计：',
+      for (final counter in forwardingCounterLabels.entries)
+        if (snapshot.forwardingCounters!.containsKey(counter.key))
+          '${counter.value}：${snapshot.forwardingCounters![counter.key]}',
     ],
     '未导出服务器地址、设备名称、IP、应用清单、授权链接或密钥。',
     '这是本机状态摘要，不代表已验证服务器或业务端口连通。',

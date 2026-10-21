@@ -238,6 +238,45 @@ void main() {
     }
   });
 
+  test('转发容量诊断保留两类计数且不导出目的地址', () {
+    final snapshot = VpnSnapshot.fromJson({
+      'status': {
+        'forwarding': {
+          'statistics': {
+            'data_capacity_drops': 32,
+            'dns_capacity_drops': 0,
+            'destination': 'private.example.test',
+          },
+        },
+      },
+    });
+    expect(snapshot.forwardingCounters, {
+      'data_capacity_drops': 32,
+      'dns_capacity_drops': 0,
+    });
+    expect(
+      () => snapshot.forwardingCounters!['dns_capacity_drops'] = 1,
+      throwsUnsupportedError,
+    );
+    for (final invalid in [
+      null,
+      {},
+      {'data_capacity_drops': -1},
+      {'dns_capacity_drops': '1'},
+      {'dns_capacity_drops': true},
+      {'destination': 'private.example.test'},
+    ]) {
+      expect(
+        VpnSnapshot.fromJson({
+          'status': {
+            'forwarding': {'statistics': invalid},
+          },
+        }).forwardingCounters,
+        isNull,
+      );
+    }
+  });
+
   test('本机中继只接受一致的区域编号与连接确认，不把旧内核当作已连接', () {
     for (final raw in [
       null,

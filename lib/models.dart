@@ -263,6 +263,10 @@ const packetCounterLabels = {
   'acl_drops': '访问策略丢弃',
   'related_icmp': '已关联连接的 ICMP 控制回包',
   'untracked_exit_drops': '出口回包未匹配有效连接',
+  'disco_packets': '收到路径探测包',
+  'disco_pings': '已验证路径探测请求',
+  'disco_pongs': '已验证路径探测回应',
+  'disco_confirmed': '成功确认双向路径',
 };
 
 Map<String, int>? _parsePacketCounters(Object? raw) {
@@ -282,6 +286,11 @@ const dnsCounterLabels = {
   'response_timeouts': 'DNS 上游响应超时',
   'upstream_closed': 'DNS 上游提前关闭',
   'invalid_responses': 'DNS 上游无效响应',
+};
+
+const forwardingCounterLabels = {
+  'data_capacity_drops': '上网转发因额度或速率限制拒绝',
+  'dns_capacity_drops': '出口 DNS 因独立额度或速率限制拒绝',
 };
 
 Map<String, int>? _parseCounters(Object? raw, Iterable<String> names) {
@@ -328,6 +337,7 @@ class VpnSnapshot {
     this.forwardingFlows = 0,
     this.packetCounters,
     this.dnsCounters,
+    this.forwardingCounters,
     this.homeRelayRegion,
   });
   factory VpnSnapshot.fromJson(Map<String, dynamic> json) {
@@ -385,6 +395,10 @@ class VpnSnapshot {
       forwardingFlows: forwarding['flows'] as int? ?? 0,
       packetCounters: _parsePacketCounters(status['receive_stats']),
       dnsCounters: _parseCounters(dns['statistics'], dnsCounterLabels.keys),
+      forwardingCounters: _parseCounters(
+        forwarding['statistics'],
+        forwardingCounterLabels.keys,
+      ),
       homeRelayRegion: _parseHomeRelayRegion(status['relay']),
     );
   }
@@ -417,6 +431,7 @@ class VpnSnapshot {
   final int forwardingFlows;
   final Map<String, int>? packetCounters;
   final Map<String, int>? dnsCounters;
+  final Map<String, int>? forwardingCounters;
   final int? homeRelayRegion;
 }
 

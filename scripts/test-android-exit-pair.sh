@@ -171,6 +171,22 @@ printf 'PASS 仅选中 shell UID 的连续 64 次解析，不依赖 Android 内�
 "$adb" -s "$client_serial" shell "SSL_CERT_DIR=/apex/com.android.conscrypt/cacerts:/system/etc/security/cacerts /data/local/tmp/xunara-exit-pair-probe -mode web-probe -listen '$dns_ip:53'" >"$directory/public-https.log"
 grep -q '^PASS verified HTTPS status=200 bytes=' "$directory/public-https.log"
 printf 'PASS 普通 UID 经安卓出口解析域名并取得真实 HTTPS 页面，证书链与主机名校验通过\n'
+capacity_ready=false
+# 前面的 HTTPS 关闭与状态采样异步；只有限补充探针，不把短暂满额当持续饱和。
+for capacity_attempt in 1 2 3; do
+    "$adb" -s "$client_serial" shell "/data/local/tmp/xunara-exit-pair-probe -mode udp-capacity -target 1.1.1.1:53" >"$directory/udp-capacity-$capacity_attempt.log"
+    attempt=0
+    while [ "$attempt" -lt 20 ]; do
+        snapshot "$exit_serial" >"$directory/exit-capacity.json"
+        if jq -e '.status.forwarding.flows >= 32 and .status.forwarding.statistics.data_capacity_drops > 0' "$directory/exit-capacity.json" >/dev/null; then capacity_ready=true; break; fi
+        attempt=$((attempt+1)); sleep 0.2
+    done
+    [ "$capacity_ready" != true ] || break
+done
+[ "$capacity_ready" = true ] || { echo '未实际达到出口业务额度，不能认定饱和测试通过。' >&2; exit 1; }
+"$adb" -s "$client_serial" shell "/data/local/tmp/xunara-exit-pair-probe -mode dns-burst -listen '$dns_ip:53' -target cloudflare.com" >"$directory/dns-saturated.log"
+grep -q '^PASS DNS burst lookups=64 ' "$directory/dns-saturated.log"
+printf 'PASS 出口业务额度实际占满后，独立 DNS 仍连续完成 64 次解析\n'
 snapshot "$exit_serial" >"$directory/exit-forwarded.json"
 jq -e '.status.forwarding.active and .status.receive_stats.decoded_packets > 0 and .status.bytes_sent > 0' "$directory/exit-forwarded.json" >/dev/null
 curl --noproxy '*' --max-time 5 -fsS -X POST 'http://127.0.0.1:18080/_test/exit?host=android-pair-exit&revoke=1' >"$directory/revoked.json"
