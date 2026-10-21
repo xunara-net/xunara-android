@@ -229,6 +229,8 @@ wait_marker dns-ready
 dns_ip=$("$adb" -s "$serial" shell run-as net.xunara.android cat cache/integration-dns-ready | jq -r .dns)
 "$adb" -s "$serial" shell ping -c 1 -W 4 rust-router.core.test >"$directory/magicdns-system.log"
 grep -F "$router_ip" "$directory/magicdns-system.log" >/dev/null
+"$adb" -s "$serial" shell ping -c 1 -W 4 rust-router >"$directory/magicdns-short-system.log"
+grep -F "$router_ip" "$directory/magicdns-short-system.log" >/dev/null
 printf 'PASS Android 系统解析器通过 VPN MagicDNS 解析设备域名\n'
 dns_query() {
     encoded=$(node -e 'const name=process.argv[1]; const labels=name.split(".").filter(Boolean).flatMap(label=>[Buffer.from([label.length]),Buffer.from(label)]); const query=Buffer.concat([Buffer.from("123401000001000000000000","hex"),...labels,Buffer.from([0,0,1,0,1])]); if(process.argv[3]==="SECURE")query[3]|=0x20; const prefix=Buffer.alloc(2); prefix.writeUInt16BE(query.length); process.stdout.write((process.argv[2]==="tcp"?Buffer.concat([prefix,query]):query).toString("base64"));' "$1" "$2" "$3")

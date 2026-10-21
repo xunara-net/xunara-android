@@ -483,7 +483,13 @@ void main() {
         await waitForMarker('phone-subnet-verified');
         await gateway.disconnect();
         await waitFor(gateway, ConnectionPhase.disconnected);
-        await gateway.saveProfile(testProfile.copyWith(advertiseExit: true));
+        // 此阶段验收隔离夹具的假域名与 ACL 子网，不把物理网络无法解析的 .test 域当作公网。
+        await gateway.saveProfile(
+          testProfile.copyWith(
+            advertiseExit: true,
+            dnsResolver: '192.168.90.2:5353',
+          ),
+        );
         await gateway.connect();
         await waitFor(gateway, ConnectionPhase.connected);
         await marker('phone-exit-ready');

@@ -273,6 +273,9 @@ const dnsCounterLabels = {
   'queries': '实际 DNS 请求',
   'responses': 'DNS 已生成响应',
   'servfail': 'DNS 服务器失败响应',
+  'peer_queries': '其他设备经本机出口的 DNS 查询',
+  'peer_responses': '本机出口生成的 DNS 响应',
+  'peer_servfail': '本机出口 DNS 失败响应',
   'nxdomain': 'DNS 无此域名响应',
   'timeouts': 'DNS 上游超时次数',
 };

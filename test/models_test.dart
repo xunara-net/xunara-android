@@ -191,12 +191,22 @@ void main() {
             'queries': 2,
             'responses': 1,
             'timeouts': 1,
+            'peer_queries': 3,
+            'peer_responses': 2,
+            'peer_servfail': 1,
             'domain': 'private.example.test',
           },
         },
       },
     });
-    expect(snapshot.dnsCounters, {'queries': 2, 'responses': 1, 'timeouts': 1});
+    expect(snapshot.dnsCounters, {
+      'queries': 2,
+      'responses': 1,
+      'timeouts': 1,
+      'peer_queries': 3,
+      'peer_responses': 2,
+      'peer_servfail': 1,
+    });
     expect(() => snapshot.dnsCounters!['queries'] = 0, throwsUnsupportedError);
     for (final invalid in [
       null,

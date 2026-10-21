@@ -1966,7 +1966,7 @@ dependencies = [
 [[package]]
 name = "xunara-client"
 version = "0.1.0"
-source = "git+https://github.com/xunara-net/xunara-client?rev=22d0d5b6aff7aa2db8877b982dd395ed29cdc310#22d0d5b6aff7aa2db8877b982dd395ed29cdc310"
+source = "git+https://github.com/xunara-net/xunara-client?rev=607d7bc74ad6a0248d6268477bf64a026953b623#607d7bc74ad6a0248d6268477bf64a026953b623"
 dependencies = [
  "anyhow",
  "base64",

@@ -16,6 +16,8 @@
 连接代次、重连次数、本机中继连接确认及白名单数据包计数；不导出服务器、IP、设备名称、出口身份或密钥。
 复制前先尝试一次访问网页，保留失败时的连接。计数缺失显示未知，不假装零丢包。
 
+`0.5.6` 对齐出口宿主 DNS、解析器竞争与系统 DNS 地址退避。隔离模拟器已复现旧版“IP 可访问、域名超时”，同身份覆盖新版后恢复公网解析与 MagicDNS；最终 Release 与官方 Android 的出口混测通过。**两台均用玄序时请都覆盖更新**，不要卸载或清数据；原物理手机仍需复测。详见 [DNS 修复与验收](docs/magicdns-fix.md)。
+
 <p>
   <img src="docs/screenshots/connect.png" width="240" alt="连接首页" />
   <img src="docs/screenshots/devices.png" width="240" alt="设备页面" />

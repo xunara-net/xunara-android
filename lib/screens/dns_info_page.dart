@@ -78,6 +78,11 @@ class DnsInfoPage extends StatelessWidget {
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 10),
+            if (controller.profile?.exitNodeId.isNotEmpty == true)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text('设备域名在本机解析；公网域名通过所选出口解析。出口不可用时不会改用手机原网络。'),
+              ),
             const Text(
               '开启后，参与 VPN 的应用可按设备域名连接。解析地址与局域网冲突时自动退避，不抢占原有内网。切换设置会短暂重建连接；断开 VPN 后恢复原来的 DNS。Android 严格“私人 DNS”或应用自带 DoH 可能绕过此解析器。',
               style: TextStyle(color: Colors.blueGrey, height: 1.8),
