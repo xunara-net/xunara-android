@@ -62,19 +62,19 @@ class DnsInfoPage extends StatelessWidget {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.dns_outlined),
-                title: const Text('控制面的 MagicDNS'),
+                title: const Text('MagicDNS'),
                 subtitle: Text(
                   !connected
                       ? '连接后读取当前网络配置'
                       : snapshot.magicDnsEnabled
-                      ? '服务器已启用'
-                      : '服务器未启用',
+                      ? '此网络已启用'
+                      : '此网络未启用',
                 ),
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              snapshot.dnsActive ? 'VPN DNS 已生效' : 'VPN DNS 尚未生效',
+              snapshot.dnsActive ? '正在使用玄序 DNS' : '正在使用系统 DNS',
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 10),
@@ -84,7 +84,7 @@ class DnsInfoPage extends StatelessWidget {
                 child: Text('设备域名在本机解析；公网域名通过所选出口解析。出口不可用时不会改用手机原网络。'),
               ),
             const Text(
-              '开启后，参与 VPN 的应用可按设备域名连接。解析地址与局域网冲突时自动退避，不抢占原有内网。切换设置会短暂重建连接；断开 VPN 后恢复原来的 DNS。Android 严格“私人 DNS”或应用自带 DoH 可能绕过此解析器。',
+              '开启后使用网络 DNS 设置与设备域名。断开后恢复系统解析；严格私人 DNS 或应用自带 DoH 可能绕过网络 DNS。',
               style: TextStyle(color: Colors.blueGrey, height: 1.8),
             ),
             if (snapshot.dnssecActive)
@@ -93,8 +93,24 @@ class DnsInfoPage extends StatelessWidget {
                 child: Text('本机 DNSSEC 验证已启用：此状态不代表所有域名都已签名。'),
               ),
             if (connected) ...[
-              if (snapshot.dnsAddress.isNotEmpty)
-                _copyable(context, snapshot.dnsAddress),
+              const SizedBox(height: 24),
+              const Text('DNS 服务器'),
+              if (controller.profile?.dnsResolver.isNotEmpty == true) ...[
+                _copyable(context, controller.profile!.dnsResolver),
+                const Text('使用此账号保存的自定义解析器'),
+              ] else if (snapshot.dnsResolvers.isNotEmpty) ...[
+                for (final resolver in snapshot.dnsResolvers)
+                  _copyable(context, resolver),
+              ] else
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    '未配置全局解析器，跟随当前网络',
+                    style: TextStyle(color: Colors.blueGrey),
+                  ),
+                ),
+              if (controller.profile?.exitNodeId.isNotEmpty == true)
+                const Text('当前使用出口节点提供的公网解析，以上为已保存的 DNS 配置。'),
               if (snapshot.selfName.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 const Text('本机域名'),
@@ -115,6 +131,18 @@ class DnsInfoPage extends StatelessWidget {
                 ),
               for (final domain in snapshot.searchDomains)
                 _copyable(context, domain),
+              for (final route in snapshot.dnsRoutes.entries) ...[
+                const SizedBox(height: 24),
+                Text('分流域：${route.key}'),
+                if (route.value.isEmpty)
+                  const ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('本机解析'),
+                  )
+                else
+                  for (final resolver in route.value)
+                    _copyable(context, resolver),
+              ],
               const SizedBox(height: 16),
               TextButton.icon(
                 onPressed: () =>
@@ -152,7 +180,7 @@ class DnsInfoPage extends StatelessWidget {
       await Clipboard.setData(ClipboardData(text: value));
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('已复制域名')));
+            .showSnackBar(const SnackBar(content: Text('已复制')));
       }
     },
   );

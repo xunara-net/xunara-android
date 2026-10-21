@@ -284,6 +284,7 @@ void main() {
         generation: 4,
         reconnects: 2,
         dnsActive: true,
+        dnssecActive: true,
         exitNodeAvailable: true,
         homeRelayRegion: 900,
         packetCounters: {'tun_packets': 8, 'source_drops': 3, 'private-id': 9},
@@ -291,12 +292,14 @@ void main() {
       gateway.profile.copyWith(
         exitNodeId: 'private-exit-id',
         exitNodeName: 'private-exit-name',
+        validateDnssec: true,
       ),
     );
     expect(report, contains('连接代次：4 · 本次自动重连 2 次'));
     expect(report, contains('已选择'));
     expect(report, contains('匹配，不代表已出网'));
     expect(report, contains('内核 DNS 已启用'));
+    expect(report, contains('本机 DNSSEC：已保存开启 · 本次验证已启用'));
     expect(report, contains('区域 900 已通过连接心跳，不代表出口业务可用'));
     expect(report, contains('对端来源不匹配丢弃：3'));
     for (final value in [
@@ -311,6 +314,7 @@ void main() {
     expect(unknown, contains('不按零丢包处理'));
     expect(unknown, contains('内核未提供有效连接确认'));
     expect(unknown, isNot(contains('解密失败：0')));
+    expect(unknown, contains('本机 DNSSEC：未单独开启 · 本次验证未报告启用'));
   });
 
   testWidgets('系统诊断读取失败不把未知状态伪装成正常', (tester) async {

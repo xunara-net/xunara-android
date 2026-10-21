@@ -97,7 +97,7 @@ void main() {
     );
     expect(toggle.value, isTrue);
     expect(toggle.onChanged, isNull);
-    expect(find.text('VPN DNS 尚未生效'), findsOneWidget);
+    expect(find.text('正在使用系统 DNS'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     controller.dispose();
   });

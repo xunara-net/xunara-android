@@ -18,6 +18,8 @@
 
 `0.5.6` 对齐出口宿主 DNS、解析器竞争与系统 DNS 地址退避。隔离模拟器已复现旧版“IP 可访问、域名超时”，同身份覆盖新版后恢复公网解析与 MagicDNS；最终 Release 与官方 Android 的出口混测通过。**两台均用玄序时请都覆盖更新**，不要卸载或清数据；原物理手机仍需复测。详见 [DNS 修复与验收](docs/magicdns-fix.md)。
 
+`0.5.7` 的 DNS 页参考官方 Android，显示实际配置的解析器、搜索域、分流域和启用状态，不再将内部 VPN 监听地址展示成 DNS 服务器。诊断增加 DNSSEC 保存 / 实际启用状态。**这是展示与诊断改进，不代表原物理手机的解析故障已修复**；真机排查与系统解析回归进度见同一[验收记录](docs/magicdns-fix.md)。
+
 <p>
   <img src="docs/screenshots/connect.png" width="240" alt="连接首页" />
   <img src="docs/screenshots/devices.png" width="240" alt="设备页面" />

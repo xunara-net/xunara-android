@@ -67,3 +67,40 @@ Android 8.0+、ARM64 / x86_64 不变。应用版本 `0.5.6+13`，实际 APK 版�
 
 已发布 [v0.5.6-preview.1](https://github.com/xunara-net/xunara-android/releases/tag/v0.5.6-preview.1)，从公开下载地址重新取得两个 APK、BUILD.json 与 SHA256SUMS，校验全部一致。集成测试后恢复 `lib/main.dart` 重建的两个包与已验收包逐字节一致，最终 Kotlin 单测及 Release lint 再次通过。
 临时 DNS 丢弃规则、代理、namespace、凭据 / 状态目录及两台本轮专用 AVD 已清理，原有三台 AVD 与生产设备配置保留；失败记录保留于受限测试日志，不将其改判通过。
+
+## 0.5.7：DNS 展示与真机排查
+
+### What changed
+
+DNS 页仅展示网络配置的解析器、搜索域、分流域和启用状态，不将内部 VPN 监听地址当作 DNS 服务器。自定义解析器单独注明；选中出口时明确公网解析由出口提供，列出的网络配置不冒充出口实际使用的物理 DNS。内核固定到 `42e38326890d3253bef1b8553e81439860e58845`，只新增内存配置元数据，不改解析行为。
+
+脱敏诊断增加 DNSSEC 保存状态与本次实际验证状态，避免仅凭“已连接”或“已保存”推断验证链路正常。
+
+### Why
+
+按照用户授权，以独立临时官方 Linux `tailscaled 1.102.2` userspace 设备接入真实租户，对两台手机执行只读 Termux 检查：
+
+- 出口手机的系统公网解析、指定上游的 UDP / TCP DNS 和验证证书的 HTTPS 均得到有效结果；经 WireGuard 访问出口 peerapi `/dns-query` 得到 HTTP 200 和有效 DNS 答复。
+- 临时官方客户端明确选择同一手机出口后，预解析地址的 HTTPS 取得 200；这不是默认物理网络直连的应用请求。
+- 使用端手机的 Android 系统解析失败，预解析地址的部分 HTTPS 请求也超时。因此不能据此认定故障只涉及 DNS，更不能将页面展示改进写成故障已解决。
+- SSH 后续间歇卡在握手，尚未取得两台当前应用版本、出口选择、应用分流与 DNSSEC 的完整诊断；已请求用户保持 Termux 前台。不能把 SSH 不响应直接认定为 VPN、账号或手机系统的根因。
+- 后续复查时控制面已报告使用端离线，出口端仍在线；需恢复使用端连接后继续采集，不能用离线时的超时判定 DNS 根因。
+
+### Compatibility impact
+
+参考[固定版本官方 DNS 页面](https://github.com/tailscale/tailscale-android/blob/1.98.8-t1241b225b-gbcbaf1889/android/src/main/java/com/tailscale/ipn/ui/view/DNSSettingsView.kt)对已有配置做展示，不改变 TS2021、DNSConfig、WireGuard、DERP、系统路由或审批。内部 DNS 监听地址仍供 Android 配置与验收探针使用，未删除或替换。
+
+### Security impact
+
+不为排障更换原设备、出口、DNS、ACL、应用分流或账号密码。临时接入密钥只从受保护文件导入且接入后已撤销；SSH 密码经交互输入。原始手机报文、账号会话与密钥不提交到源码或发布产物。新增诊断只包含状态，不增加 IP、设备名称、出口身份或 DNS 查询内容。
+
+### Tests
+
+- Rust fmt / clippy、65 项普通测试与两项显式官方兼容向量通过；实际 TUN、官方 tsnet 双向访问、ACL、子网与 UDP 阻断后的 DERP 回退 / 恢复通过。
+- Flutter analyze、51 项单元 / Widget 测试、360 像素 DNS 页面与不可变配置元数据测试通过；native 主机检查、3 项生命周期测试、ARM64 clippy 和两个 ABI 原生构建通过。
+- 两台独立 Android 36 x86_64 的 Debug 测试通过公网 IP HTTP、DNS UDP / TCP、验证证书的 HTTPS，以及普通 UID 的 Android Bionic/netd 公网域名解析。最后一项是新增断言，不能仅以显式向代理发 DNS 或 Go 自带解析器代替系统解析；公网 ICMP 被禁不算 DNS 失败。
+- 撤销出口后 DNS SERVFAIL、公网不直连、无错误重建通过。以上仍是专用模拟器结果，不等于原用户手机解析已恢复。
+- 本轮采用十六秒探针，Android 的真实 DoH / DoT、完整 DNSSEC 签名链、错误签名拒绝及普通 VPN 完整回归通过。0.5.6 记录中的旧失败仍保留，不倒改旧运行结果；本轮没有为此禁用 DNSSEC 或跳过 TLS 校验。
+- 实际混淆 Release 同签名升级、无接入密钥恢复身份、双栈 TCP、系统 MagicDNS 和新 DNS 页面通过；页面通过真实 JNI 元数据显示夹具解析器，不出现内部监听地址。最终包两个 ABI 均保留全部六个 JNI 回调，签名沿用 0.5.6，版本码为 2014 / 4014，ELF / ZIP 16 KiB 对齐检查通过。
+- Kotlin 单测、Debug / Release lint 通过。直接 Gradle 编译曾受集成测试生成的插件注册文件影响而失败；显式使用 `lib/main.dart` 构建正式 APK 后重跑全部通过，没有用 Debug 包替代 Release。
+- Rust 源提交 CI `39603705294` 通过；真机使用端故障仍待继续排查，本版不承诺修复该故障。

@@ -8,6 +8,68 @@ import 'package:xunara_android/system_diagnostics.dart';
 import 'fake_gateway.dart';
 
 void main() {
+  test('DNS 配置保留上游与分流清单，不把监听地址混入解析器', () {
+    final snapshot = VpnSnapshot.fromJson({
+      'status': {
+        'dns': {
+          'address': '100.100.100.100',
+          'resolvers': ['1.1.1.1', '114.114.114.114'],
+          'routes': {
+            'office.example': ['10.0.0.53'],
+            'local.example': [],
+          },
+        },
+      },
+    });
+    expect(snapshot.dnsResolvers, ['1.1.1.1', '114.114.114.114']);
+    expect(snapshot.dnsRoutes['office.example'], ['10.0.0.53']);
+    expect(snapshot.dnsRoutes['local.example'], isEmpty);
+    expect(() => snapshot.dnsResolvers.add('8.8.8.8'), throwsUnsupportedError);
+    expect(
+      () => snapshot.dnsRoutes['office.example']!.clear(),
+      throwsUnsupportedError,
+    );
+    expect(VpnSnapshot.fromJson({}).dnsResolvers, isEmpty);
+  });
+
+  testWidgets('DNS 页展示解析器与分流，不展示内部 DNS 监听地址', (tester) async {
+    tester.view.physicalSize = const Size(360, 780);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final gateway = FakeGateway()
+      ..current = VpnSnapshot.fromJson({
+        'phase': 'connected',
+        'status': {
+          'dns': {
+            'active': true,
+            'address': '100.100.100.100',
+            'enabled': true,
+            'resolvers': ['1.1.1.1', '114.114.114.114'],
+            'domains': ['mesh.example'],
+            'routes': {
+              'office.example': ['10.0.0.53'],
+            },
+          },
+        },
+      });
+    final controller = AppController(gateway);
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(home: DnsInfoPage(controller: controller)),
+    );
+    expect(find.text('正在使用玄序 DNS'), findsOneWidget);
+    expect(find.text('100.100.100.100'), findsNothing);
+    await tester.scrollUntilVisible(find.text('1.1.1.1'), 180);
+    expect(find.text('1.1.1.1'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('10.0.0.53'), 180);
+    expect(find.text('分流域：office.example'), findsOneWidget);
+    expect(find.text('10.0.0.53'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+  });
+
   test('DNS 设置增量序列化，不复用其他账号配置', () {
     const profile = ClientProfile(
       server: 'https://control.test/',

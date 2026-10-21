@@ -38,7 +38,7 @@ for serial in "$exit_serial" "$client_serial"; do
         if "$adb" -s "$serial" reverse --list | grep -q "tcp:$port "; then echo '已有反向端口映射，拒绝覆盖。' >&2; exit 1; fi
     done
 done
-for program in flutter socat unshare nsenter curl ip jq node ss; do command -v "$program" >/dev/null || { echo "缺少 $program" >&2; exit 1; }; done
+for program in flutter socat unshare nsenter curl ip jq node ss timeout; do command -v "$program" >/dev/null || { echo "缺少 $program" >&2; exit 1; }; done
 [ -x "$core/target/compat-web-probe" ] || { echo '请先用 CGO_ENABLED=0 构建 tests/compat 到 target/compat-web-probe。' >&2; exit 1; }
 for port in 18080 18081; do [ -z "$(ss -H -ltn "sport = :$port")" ] || { echo '测试端口已占用。' >&2; exit 1; }; done
 directory=$(mktemp -d)
@@ -155,6 +155,12 @@ dns_query() {
 dns_query udp ANSWER
 dns_query tcp ANSWER
 printf 'PASS 普通 UID 的公网 DNS UDP/TCP 经 WireGuard peerapi 与安卓出口解析\n'
+# 显式查询代理不等于 Android 应用能解析；额外经过 Bionic/netd，且不把公网禁 ICMP 当 DNS 失败。
+timeout 20 "$adb" -s "$client_serial" shell ping -c 1 -W 2 example.com >"$directory/public-system-dns.log" 2>&1 || :
+grep -Eq '^PING example\.com \([0-9a-fA-F:.]+\)' "$directory/public-system-dns.log" || {
+    echo 'Android 系统解析器未能通过所选出口解析公网域名。' >&2; exit 1;
+}
+printf 'PASS 普通 UID 经 Android Bionic/netd 解析公网域名（不以 ICMP 答复作为 DNS 判据）\n'
 "$adb" -s "$client_serial" shell test ! -e /data/local/tmp/xunara-exit-pair-probe
 touch "$directory/$client_serial-probe-installed"
 "$adb" -s "$client_serial" push "$core/target/compat-web-probe" /data/local/tmp/xunara-exit-pair-probe >/dev/null

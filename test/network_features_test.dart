@@ -105,8 +105,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: DnsInfoPage(controller: controller)),
     );
-    expect(find.text('服务器已启用'), findsOneWidget);
-    expect(find.text('VPN DNS 尚未生效'), findsOneWidget);
+    expect(find.text('此网络已启用'), findsOneWidget);
+    expect(find.text('正在使用系统 DNS'), findsOneWidget);
     expect(find.text('phone.example.test'), findsOneWidget);
     expect(find.text('example.test'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());

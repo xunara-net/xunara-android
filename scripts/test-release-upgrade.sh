@@ -69,6 +69,26 @@ grep -F "$router_ip" "$directory/release-magicdns.log" >/dev/null
 "$adb" -s "$serial" exec-out screencap -p >"$directory/release-connected.png"
 press '设置'
 sleep 1
+press '设备域名与 DNS'
+dns_ready=false
+for attempt in $(seq 1 12); do
+    if ! window "$directory/release-dns-window.xml"; then sleep 0.3; continue; fi
+    if grep -Fq '100.100.100.100' "$directory/release-dns-window.xml"; then
+        echo 'DNS 页面仍将内部监听地址作为上游显示。' >&2; exit 1;
+    fi
+    if grep -Fq '192.168.90.2:5353' "$directory/release-dns-window.xml"; then dns_ready=true; break; fi
+    if [ "$attempt" = 3 ] && grep -q 'package="net.xunara.android"' "$directory/release-dns-window.xml"; then
+        dimensions=$("$adb" -s "$serial" shell wm size | sed -n 's/^Physical size: //p' | tr -d '\r')
+        width=${dimensions%x*}
+        height=${dimensions#*x}
+        "$adb" -s "$serial" shell input swipe "$((width / 2))" "$((height * 3 / 4))" "$((width / 2))" "$((height / 2))" 400
+    fi
+    sleep 0.3
+done
+[ "$dns_ready" = true ] || { echo '正式 DNS 页面未显示实际配置的解析器。' >&2; exit 1; }
+"$adb" -s "$serial" exec-out screencap -p >"$directory/release-dns.png"
+"$adb" -s "$serial" shell input keyevent 4
+sleep 1
 press '共享本机网络'
 forwarding_ready=false
 for attempt in $(seq 1 20); do
@@ -86,4 +106,4 @@ while :; do
     attempt=$((attempt+1)); [ "$attempt" -lt 30 ] || { echo '停止 Release 后仍残留 VPN。' >&2; exit 1; }
     sleep 0.2
 done
-printf 'PASS 实际混淆 Release 同签名升级、无密钥连接、双栈 TCP、MagicDNS、网络共享页面及停止清理\n'
+printf 'PASS 实际混淆 Release 同签名升级、无密钥连接、双栈 TCP、MagicDNS、真实 DNS 配置页面、网络共享页面及停止清理\n'

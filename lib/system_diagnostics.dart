@@ -85,6 +85,7 @@ class SystemDiagnostics {
         null => '未知',
       }}',
     '网络 DNS：${profile.acceptDns ? '已保存开启' : '未单独开启'} · 内核 DNS ${snapshot.dnsActive ? '已启用' : '未报告启用'}',
+    '本机 DNSSEC：${profile.validateDnssec ? '已保存开启' : '未单独开启'} · 本次验证${snapshot.dnssecActive ? '已启用' : '未报告启用'}',
     '本机提供出口：${profile.advertiseExit ? '已请求' : '未请求'} · 本次转发${snapshot.forwardingActive ? '已启用' : '未报告启用'}',
     '可见设备：${snapshot.devices.length} · 跳过冲突路由：${snapshot.skippedRoutes.length}',
     '本机中继：${snapshot.homeRelayRegion == null

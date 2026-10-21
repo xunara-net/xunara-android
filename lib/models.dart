@@ -311,6 +311,8 @@ class VpnSnapshot {
     this.keyExpiry,
     this.magicDnsEnabled = false,
     this.searchDomains = const [],
+    this.dnsResolvers = const [],
+    this.dnsRoutes = const {},
     this.dnsActive = false,
     this.dnsAddress = '',
     this.dnssecActive = false,
@@ -357,6 +359,16 @@ class VpnSnapshot {
       keyExpiry: status['key_expiry'] as String?,
       magicDnsEnabled: dns['enabled'] as bool? ?? false,
       searchDomains: (dns['domains'] as List? ?? []).cast<String>(),
+      dnsResolvers: List.unmodifiable(
+        (dns['resolvers'] as List? ?? []).whereType<String>(),
+      ),
+      dnsRoutes: Map.unmodifiable({
+        for (final entry in (dns['routes'] as Map? ?? {}).entries)
+          if (entry.key is String && entry.value is List)
+            entry.key as String: List<String>.unmodifiable(
+              (entry.value as List).whereType<String>(),
+            ),
+      }),
       dnsActive: dns['active'] as bool? ?? false,
       dnsAddress: dns['address'] as String? ?? '',
       dnssecActive: dns['dnssec_validate'] as bool? ?? false,
@@ -388,6 +400,8 @@ class VpnSnapshot {
   final String? keyExpiry;
   final bool magicDnsEnabled;
   final List<String> searchDomains;
+  final List<String> dnsResolvers;
+  final Map<String, List<String>> dnsRoutes;
   final bool dnsActive;
   final String dnsAddress;
   final bool dnssecActive;
