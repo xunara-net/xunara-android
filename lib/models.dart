@@ -181,6 +181,8 @@ class NetworkDevice {
     this.routes = const [],
     this.stableId = '',
     this.exitNode = false,
+    this.online,
+    this.lastSeen,
   });
   factory NetworkDevice.fromJson(Map<String, dynamic> json) => NetworkDevice(
     id: json['id'] as String? ?? '',
@@ -194,6 +196,8 @@ class NetworkDevice {
     routes: (json['routes'] as List? ?? []).cast<String>(),
     stableId: json['stable_id'] as String? ?? '',
     exitNode: json['exit_node'] as bool? ?? false,
+    online: json['online'] is bool ? json['online'] as bool : null,
+    lastSeen: json['last_seen'] is String ? json['last_seen'] as String : null,
   );
   final String id;
   final String name;
@@ -206,6 +210,13 @@ class NetworkDevice {
   final List<String> routes;
   final String stableId;
   final bool exitNode;
+  final bool? online;
+  final String? lastSeen;
+  String get onlineLabel => switch (online) {
+    true => '在线',
+    false => '离线',
+    null => '状态未知',
+  };
   bool get shared => stableId.startsWith('share:');
   String get displayName => name.replaceFirst(RegExp(r'\.$'), '');
   String get pathLabel => path == 'direct' ? '直连已探测' : '中继候选';
@@ -242,7 +253,7 @@ class PingResult {
 const packetCounterLabels = {
   'tun_packets': 'VPN 发出包',
   'tun_source_drops': '本机来源不匹配丢弃',
-  'dns_queries': 'VPN DNS 查询',
+  'dns_queries': 'VPN DNS 数据包（含 TCP 控制包）',
   'encrypted_packets': '收到加密包',
   'decoded_packets': '成功解密包',
   'decrypt_errors': '解密失败',
@@ -250,13 +261,27 @@ const packetCounterLabels = {
   'source_drops': '对端来源不匹配丢弃',
   'destination_drops': '目标不匹配丢弃',
   'acl_drops': '访问策略丢弃',
+  'related_icmp': '已关联连接的 ICMP 控制回包',
+  'untracked_exit_drops': '出口回包未匹配有效连接',
 };
 
 Map<String, int>? _parsePacketCounters(Object? raw) {
+  return _parseCounters(raw, packetCounterLabels.keys);
+}
+
+const dnsCounterLabels = {
+  'queries': '实际 DNS 请求',
+  'responses': 'DNS 已生成响应',
+  'servfail': 'DNS 服务器失败响应',
+  'nxdomain': 'DNS 无此域名响应',
+  'timeouts': 'DNS 上游超时次数',
+};
+
+Map<String, int>? _parseCounters(Object? raw, Iterable<String> names) {
   if (raw is! Map) return null;
   final counters = <String, int>{};
   // 诊断只接收固定名称的非负整数，不能把任意内核字段或日志带入可复制报告。
-  for (final key in packetCounterLabels.keys) {
+  for (final key in names) {
     if (!raw.containsKey(key)) continue;
     final value = raw[key];
     if (value is! int || value < 0) return null;
@@ -287,11 +312,13 @@ class VpnSnapshot {
     this.dnsAddress = '',
     this.dnssecActive = false,
     this.exitNodeAvailable = false,
+    this.exitNodeOnline,
     this.ownerLogin = '',
     this.forwardingActive = false,
     this.forwardingApproved = const [],
     this.forwardingFlows = 0,
     this.packetCounters,
+    this.dnsCounters,
     this.homeRelayRegion,
   });
   factory VpnSnapshot.fromJson(Map<String, dynamic> json) {
@@ -331,12 +358,14 @@ class VpnSnapshot {
       dnsAddress: dns['address'] as String? ?? '',
       dnssecActive: dns['dnssec_validate'] as bool? ?? false,
       exitNodeAvailable: exit['available'] as bool? ?? false,
+      exitNodeOnline: exit['online'] is bool ? exit['online'] as bool : null,
       ownerLogin: status['owner_login'] as String? ?? '',
       forwardingActive: forwarding['active'] as bool? ?? false,
       forwardingApproved: (forwarding['approved'] as List? ?? [])
           .cast<String>(),
       forwardingFlows: forwarding['flows'] as int? ?? 0,
       packetCounters: _parsePacketCounters(status['receive_stats']),
+      dnsCounters: _parseCounters(dns['statistics'], dnsCounterLabels.keys),
       homeRelayRegion: _parseHomeRelayRegion(status['relay']),
     );
   }
@@ -360,11 +389,13 @@ class VpnSnapshot {
   final String dnsAddress;
   final bool dnssecActive;
   final bool exitNodeAvailable;
+  final bool? exitNodeOnline;
   final String ownerLogin;
   final bool forwardingActive;
   final List<String> forwardingApproved;
   final int forwardingFlows;
   final Map<String, int>? packetCounters;
+  final Map<String, int>? dnsCounters;
   final int? homeRelayRegion;
 }
 
@@ -386,7 +417,16 @@ String expiryLabel(String? raw) {
   final expiry = raw == null ? null : DateTime.tryParse(raw);
   if (expiry == null) return '服务器未提供';
   if (expiry.year <= 1) return '不自动过期';
-  final local = expiry.toLocal();
+  return _localTime(expiry);
+}
+
+String lastSeenLabel(String? raw) {
+  final seen = raw == null ? null : DateTime.tryParse(raw);
+  return seen == null || seen.year <= 1 ? '服务器未提供' : _localTime(seen);
+}
+
+String _localTime(DateTime value) {
+  final local = value.toLocal();
   String pad(int value) => value.toString().padLeft(2, '0');
   return '${local.year}-${pad(local.month)}-${pad(local.day)} ${pad(local.hour)}:${pad(local.minute)}';
 }

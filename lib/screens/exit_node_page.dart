@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
 import '../models.dart';
+import '../widgets/device_presence.dart';
 
 class ExitNodePage extends StatelessWidget {
   const ExitNodePage({required this.controller, super.key});
@@ -74,14 +75,17 @@ class ExitNodePage extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
                   snapshot.phase == ConnectionPhase.connected
-                      ? snapshot.exitNodeAvailable
+                      ? snapshot.exitNodeOnline == false
+                            ? '所选出口已离线，公网流量不会自动改走其他出口。请恢复该设备或关闭出口模式。'
+                            : snapshot.exitNodeAvailable
                             ? '已选择：${profile!.exitNodeName}。实际联网能力取决于远端转发、ACL 与链路。'
                             : '所选出口当前不可用，公网流量被阻止，不会自动改走其他出口。请恢复出口或关闭出口模式。'
                       : '已保存出口：${profile!.exitNodeName}，连接后生效。',
                   style: TextStyle(
                     color:
                         snapshot.phase == ConnectionPhase.connected &&
-                            !snapshot.exitNodeAvailable
+                            (!snapshot.exitNodeAvailable ||
+                                snapshot.exitNodeOnline == false)
                         ? Colors.orange.shade800
                         : Colors.blueGrey,
                     height: 1.6,
@@ -98,14 +102,25 @@ class ExitNodePage extends StatelessWidget {
                 child: ListTile(
                   key: Key('exit-${device.stableId}'),
                   leading: const Icon(Icons.public_rounded),
+                  enabled: device.online != false,
                   title: Text(device.displayName),
-                  subtitle: Text(
-                    '${osLabel(device.os)} · ${device.addresses.map(addressOnly).join(' / ')}',
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DevicePresence(device: device),
+                      Text(
+                        '${osLabel(device.os)} · ${device.addresses.map(addressOnly).join(' / ')}',
+                      ),
+                    ],
                   ),
                   trailing: selected == device.stableId
                       ? const Icon(Icons.check_circle_rounded)
                       : null,
-                  onTap: editable && selected != device.stableId
+                  onTap:
+                      editable &&
+                          snapshot.phase == ConnectionPhase.connected &&
+                          device.online != false &&
+                          selected != device.stableId
                       ? () => _select(context, profile, device)
                       : null,
                 ),
@@ -141,6 +156,7 @@ class ExitNodePage extends StatelessWidget {
     ClientProfile profile,
     NetworkDevice device,
   ) async {
+    final generation = controller.snapshot.generation;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -161,6 +177,21 @@ class ExitNodePage extends StatelessWidget {
       ),
     );
     if (confirmed == true && context.mounted) {
+      final current = controller.snapshot;
+      // 确认弹窗期间可能掉线或切换账号，不能把旧列表中的出口保存到新连接。
+      if (controller.profile?.id != profile.id ||
+          current.generation != generation ||
+          current.phase != ConnectionPhase.connected ||
+          !current.devices.any(
+            (peer) =>
+                peer.stableId == device.stableId &&
+                peer.exitNode &&
+                peer.online != false,
+          )) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('出口状态已变化，请刷新后重新选择')));
+        return;
+      }
       await controller.applyNetworkSettings(
         profile.copyWith(
           exitNodeId: device.stableId,

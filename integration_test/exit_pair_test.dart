@@ -24,6 +24,11 @@ void main() {
         r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$',
       ),
     );
+    final exitName =
+        settings['exit_name'] as String? ?? 'android-pair-exit.core.test.';
+    expect(exitName, endsWith('.core.test.'));
+    final holdMinutes = settings['hold_minutes'] as int? ?? 5;
+    expect(holdMinutes, inInclusiveRange(1, 10));
     final secretFile = File('$cache/exit-pair-auth-key');
     var authKey = (await secretFile.readAsString()).trim();
     await secretFile.delete();
@@ -78,13 +83,11 @@ void main() {
       } else {
         final available = await until(
           (state) => state.devices.any(
-            (device) =>
-                device.name == 'android-pair-exit.core.test.' &&
-                device.exitNode,
+            (device) => device.name == exitName && device.exitNode,
           ),
         );
         final exit = available.devices.firstWhere(
-          (device) => device.name == 'android-pair-exit.core.test.',
+          (device) => device.name == exitName,
         );
         await gateway.disconnect();
         await until((state) => state.phase == ConnectionPhase.disconnected);
@@ -102,7 +105,7 @@ void main() {
       }
       await record();
       await File('$cache/exit-pair-ready').writeAsString('{}');
-      final deadline = DateTime.now().add(const Duration(minutes: 5));
+      final deadline = DateTime.now().add(Duration(minutes: holdMinutes));
       // 业务请求由 shell UID 发起，不能用已从 VPN 排除的 Flutter 请求冒充隧道流量。
       while (!await File('$cache/exit-pair-finish').exists()) {
         if (DateTime.now().isAfter(deadline)) fail('双安卓外部数据面验收超时');

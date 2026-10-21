@@ -59,9 +59,30 @@ void main() {
       'relay_region': 900,
     });
     expect(device.pathLabel, '中继候选');
+    expect(device.online, isNull);
+    expect(device.onlineLabel, '状态未知');
     expect(addressOnly(device.addresses.first), '100.80.0.2');
     expect(device.displayName, 'nas.example.test');
     expect(formatBytes(2048), '2.0 KB');
+  });
+  test('在线状态保持三态，最近在线时间不当成到期时间', () {
+    for (final state in [true, false, null, 'false', 0]) {
+      final device = NetworkDevice.fromJson({'online': state});
+      expect(device.online, state is bool ? state : null);
+    }
+    expect(NetworkDevice.fromJson({'online': true}).onlineLabel, '在线');
+    expect(NetworkDevice.fromJson({'online': false}).onlineLabel, '离线');
+    expect(lastSeenLabel(null), '服务器未提供');
+    expect(lastSeenLabel('invalid'), '服务器未提供');
+    expect(lastSeenLabel('0001-01-01T00:00:00Z'), '服务器未提供');
+    expect(lastSeenLabel('2026-10-21T01:00:00Z'), contains('2026-10-21'));
+    final state = VpnSnapshot.fromJson({
+      'status': {
+        'exit_node': {'available': true, 'online': false},
+      },
+    });
+    expect(state.exitNodeAvailable, isTrue);
+    expect(state.exitNodeOnline, isFalse);
   });
   test('到期、DNS 和切网字段缺失时不编造状态', () {
     expect(expiryLabel(null), '服务器未提供');
@@ -157,6 +178,39 @@ void main() {
         VpnSnapshot.fromJson({
           'status': {'receive_stats': invalid},
         }).packetCounters,
+        isNull,
+      );
+    }
+  });
+
+  test('DNS 诊断只解析真实消息计数，不导出查询名称或编造零值', () {
+    final snapshot = VpnSnapshot.fromJson({
+      'status': {
+        'dns': {
+          'statistics': {
+            'queries': 2,
+            'responses': 1,
+            'timeouts': 1,
+            'domain': 'private.example.test',
+          },
+        },
+      },
+    });
+    expect(snapshot.dnsCounters, {'queries': 2, 'responses': 1, 'timeouts': 1});
+    expect(() => snapshot.dnsCounters!['queries'] = 0, throwsUnsupportedError);
+    for (final invalid in [
+      null,
+      {},
+      {'queries': -1},
+      {'responses': '1'},
+      {'domain': 'private.example.test'},
+    ]) {
+      expect(
+        VpnSnapshot.fromJson({
+          'status': {
+            'dns': {'statistics': invalid},
+          },
+        }).dnsCounters,
         isNull,
       );
     }

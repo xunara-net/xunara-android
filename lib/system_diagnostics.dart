@@ -78,6 +78,12 @@ class SystemDiagnostics {
     '切网重连：${profile.autoReconnect ? '开启' : '关闭'}',
     '连接代次：${snapshot.generation} · 本次自动重连 ${snapshot.reconnects} 次',
     '使用其他出口：${profile.exitNodeId.isEmpty ? '未选择' : '已选择'} · 本次出口条件${snapshot.exitNodeAvailable ? '匹配，不代表已出网' : '未确认匹配'}',
+    if (profile.exitNodeId.isNotEmpty)
+      '出口在线报告：${switch (snapshot.exitNodeOnline) {
+        true => '在线，不代表已出网',
+        false => '离线',
+        null => '未知',
+      }}',
     '网络 DNS：${profile.acceptDns ? '已保存开启' : '未单独开启'} · 内核 DNS ${snapshot.dnsActive ? '已启用' : '未报告启用'}',
     '本机提供出口：${profile.advertiseExit ? '已请求' : '未请求'} · 本次转发${snapshot.forwardingActive ? '已启用' : '未报告启用'}',
     '可见设备：${snapshot.devices.length} · 跳过冲突路由：${snapshot.skippedRoutes.length}',
@@ -94,6 +100,12 @@ class SystemDiagnostics {
       for (final counter in packetCounterLabels.entries)
         if (snapshot.packetCounters!.containsKey(counter.key))
           '${counter.value}：${snapshot.packetCounters![counter.key]}',
+    ],
+    if (snapshot.dnsCounters != null) ...[
+      '本次 DNS 代理统计（生成响应不代表应用已收到）：',
+      for (final counter in dnsCounterLabels.entries)
+        if (snapshot.dnsCounters!.containsKey(counter.key))
+          '${counter.value}：${snapshot.dnsCounters![counter.key]}',
     ],
     '未导出服务器地址、设备名称、IP、应用清单、授权链接或密钥。',
     '这是本机状态摘要，不代表已验证服务器或业务端口连通。',

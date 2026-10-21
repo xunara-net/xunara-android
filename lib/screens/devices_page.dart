@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
 import '../models.dart';
+import '../widgets/device_presence.dart';
 import 'device_detail_sheet.dart';
 
 class DevicesPage extends StatefulWidget {
@@ -101,9 +102,25 @@ class _DevicesPageState extends State<DevicesPage> {
                   ),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      '${device.addresses.isEmpty ? '未分配地址' : addressOnly(device.addresses.first)}\n${device.shared ? '跨网络共享 · ' : ''}${device.pathLabel}',
-                      style: const TextStyle(height: 1.6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          device.addresses.isEmpty
+                              ? '未分配地址'
+                              : addressOnly(device.addresses.first),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 4,
+                          children: [
+                            DevicePresence(device: device),
+                            if (device.shared) const Text('跨网络共享'),
+                            Text(device.pathLabel),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded),
@@ -123,7 +140,7 @@ class _DevicesPageState extends State<DevicesPage> {
             ),
           const SizedBox(height: 12),
           const Text(
-            '连接方式根据内核最近一次探测显示；中继候选不代表已验证连通，最终访问仍受 ACL 约束。',
+            '在线/离线来自服务器的连接报告；未提供时显示状态未知。在线不等于业务可达，中继候选也不代表已验证连通，最终访问仍受 ACL 约束。',
             style: TextStyle(fontSize: 12, color: Colors.blueGrey, height: 1.6),
           ),
         ],

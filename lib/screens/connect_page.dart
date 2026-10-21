@@ -29,13 +29,15 @@ class ConnectPage extends StatelessWidget {
           ),
         if (connected &&
             controller.profile!.exitNodeId.isNotEmpty &&
-            !snapshot.exitNodeAvailable)
-          const Card(
+            (!snapshot.exitNodeAvailable || snapshot.exitNodeOnline == false))
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Text(
-                '出口节点不可用：公网流量已阻止。请在设置中检查出口，或关闭出口模式。',
-                style: TextStyle(color: Colors.orange),
+                snapshot.exitNodeAvailable
+                    ? '服务器报告所选出口离线；保留原出口，不会自动改走其他出口。请检查远端设备。'
+                    : '出口节点不可用：公网流量已阻止。请在设置中检查出口，或关闭出口模式。',
+                style: const TextStyle(color: Colors.orange),
               ),
             ),
           ),
