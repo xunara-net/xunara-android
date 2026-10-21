@@ -251,16 +251,17 @@ printf 'PASS MagicDNS UDP/TCP、本地域 NXDOMAIN 与经 ACL 子网 DNS 转发\
 if [ "$public_dns" = true ]; then
     wait_marker doh-ready
     dns_ip=$("$adb" -s "$serial" shell run-as net.xunara.android cat cache/integration-doh-ready | jq -r .dns)
-    XUNARA_DNS_TIMEOUT=12 dns_query cloudflare.com udp SECURE
-    XUNARA_DNS_TIMEOUT=12 dns_query dnssec-failed.org tcp SERVFAIL
+    # 必须长于内核十二秒验证预算，避免探针先关闭而把失败答复误报成“没有响应”。
+    XUNARA_DNS_TIMEOUT=16 dns_query cloudflare.com udp SECURE
+    XUNARA_DNS_TIMEOUT=16 dns_query dnssec-failed.org tcp SERVFAIL
     "$adb" -s "$serial" shell ping -c 2 -W 4 rust-router.core.test >"$directory/doh-local-magicdns.log"
     grep -F "$router_ip" "$directory/doh-local-magicdns.log" >/dev/null
     printf 'PASS Android 受保护 socket 的真实 DoH、公网 DNSSEC 信任链、错误签名拒绝与 MagicDNS 保留\n'
     "$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-doh-verified
     wait_marker dot-ready
     dns_ip=$("$adb" -s "$serial" shell run-as net.xunara.android cat cache/integration-dot-ready | jq -r .dns)
-    XUNARA_DNS_TIMEOUT=12 dns_query cloudflare.com udp SECURE
-    XUNARA_DNS_TIMEOUT=12 dns_query dnssec-failed.org tcp SERVFAIL
+    XUNARA_DNS_TIMEOUT=16 dns_query cloudflare.com udp SECURE
+    XUNARA_DNS_TIMEOUT=16 dns_query dnssec-failed.org tcp SERVFAIL
     printf 'PASS Android 真实 DoT、完整 DNSSEC 信任链和错误签名拒绝，机器身份不变\n'
     "$adb" -s "$serial" shell run-as net.xunara.android touch cache/integration-dot-verified
 fi
