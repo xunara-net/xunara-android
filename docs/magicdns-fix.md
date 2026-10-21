@@ -64,3 +64,6 @@ Android 8.0+、ARM64 / x86_64 不变。应用版本 `0.5.6+13`，实际 APK 版�
 | x86_64 | 4013 | `93f448ca96373ac632e33be06e68dc06da8733b18ea89951733ad8489e44272f` |
 
 测试签名 SHA256 为 `261f75400df5d471f1c5067d27be2577ea6d76a93f096e61e5ec73fd59374c37`，与上一手工预览版一致。下载需同时核对发布的 `BUILD.json` / `SHA256SUMS`，不能混用 CI 随机构建签名。
+
+已发布 [v0.5.6-preview.1](https://github.com/xunara-net/xunara-android/releases/tag/v0.5.6-preview.1)，从公开下载地址重新取得两个 APK、BUILD.json 与 SHA256SUMS，校验全部一致。集成测试后恢复 `lib/main.dart` 重建的两个包与已验收包逐字节一致，最终 Kotlin 单测及 Release lint 再次通过。
+临时 DNS 丢弃规则、代理、namespace、凭据 / 状态目录及两台本轮专用 AVD 已清理，原有三台 AVD 与生产设备配置保留；失败记录保留于受限测试日志，不将其改判通过。
