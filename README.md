@@ -20,6 +20,8 @@
 
 `0.5.7` 的 DNS 页参考官方 Android，显示实际配置的解析器、搜索域、分流域和启用状态，不再将内部 VPN 监听地址展示成 DNS 服务器。诊断增加 DNSSEC 保存 / 实际启用状态。**这是展示与诊断改进，不代表原物理手机的解析故障已修复**；真机排查与系统解析回归进度见同一[验收记录](docs/magicdns-fix.md)。
 
+`0.5.8` 修复隧道 DNS 的 TCP 连接清理：旧版完成查询后仍占用出口连接额度，短时间连续解析会阻塞后续 DNS。旧内核已在真实双安卓测试中复现“少量查询正常，连续查询超时”，并非仅有界面调整。修复保留配额、ACL、固定出口、TLS 和 DNSSEC；原手机仍需覆盖安装后验收，见[连接清理记录](docs/magicdns-fix.md)。
+
 <p>
   <img src="docs/screenshots/connect.png" width="240" alt="连接首页" />
   <img src="docs/screenshots/devices.png" width="240" alt="设备页面" />

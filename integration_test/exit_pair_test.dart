@@ -71,6 +71,8 @@ void main() {
           acceptRoutes: true,
           acceptDns: !isExit,
           advertiseExit: isExit,
+          appRouting: isExit ? AppRoutingMode.all : AppRoutingMode.only,
+          applications: isExit ? const [] : const ['com.android.shell'],
         ),
       );
       await gateway.connect(authKey: authKey);

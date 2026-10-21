@@ -104,3 +104,36 @@ DNS 页仅展示网络配置的解析器、搜索域、分流域和启用状态�
 - 实际混淆 Release 同签名升级、无接入密钥恢复身份、双栈 TCP、系统 MagicDNS 和新 DNS 页面通过；页面通过真实 JNI 元数据显示夹具解析器，不出现内部监听地址。最终包两个 ABI 均保留全部六个 JNI 回调，签名沿用 0.5.6，版本码为 2014 / 4014，ELF / ZIP 16 KiB 对齐检查通过。
 - Kotlin 单测、Debug / Release lint 通过。直接 Gradle 编译曾受集成测试生成的插件注册文件影响而失败；显式使用 `lib/main.dart` 构建正式 APK 后重跑全部通过，没有用 Debug 包替代 Release。
 - Rust 源提交 CI `39603705294` 通过；真机使用端故障仍待继续排查，本版不承诺修复该故障。
+
+## 0.5.8：出口 DNS 连接泄漏
+
+### What changed
+
+内核更新到 `4c1f155d88c21a90afa0490b1a5662444aa82c52`。DNS 上游完成、失败或超时后显式终止 TCP，等终止帧入队后才回收用户态 socket；回压期间保留终止帧并有界暂停新连接。页面和账号设置沿用 0.5.7，没有改成其他 DNS 或出口。
+
+### Why
+
+真实用户域名在出口手机的系统解析、指定上游与 HTTPS 均成功，使用端却在 UDP / TCP 查询间出现 SERVFAIL 和超时。旧实现仅删除本地 socket，出口仍保留连接，每设备 32 条连接额度会被已完成查询占满。
+
+先用真实 TCP 报文连接 DNSProxy 与 Forwarder：旧实现第 33 次查询停滞并留下 32 条流，新实现连续 48 次完成且释放连接。
+
+再在两台独立 Android 36 x86_64 上复现，使用端仅将普通 shell UID 纳入 VPN，避免 Android 内核替没有 OS socket 的用户态连接补发 RST。旧内核 `42e3832` 的少量 DNS / Bionic / 公网 HTTP 都通过，但连续探针第 15 次地址查找超时；每次地址查找包含 A / AAAA，另有前序查询占用额度。
+
+只替换为修复内核后，同一测试流程连续 64 次查找通过，耗时约 7.7 秒；出口记录 134 次 DNS 请求、134 次响应、零 SERVFAIL，剩余一条流包含后续 HTTPS。随后验证证书的 HTTPS 与撤销出口后的失败关闭通过。这不是凭一次网页成功判定长期可用。
+
+### Compatibility impact
+
+使用标准 TCP 终止语义，不改 DNSConfig、TS2021、WireGuard、DERP、ACL、路由、设备归属或审批。修复位于玄序使用端；原出口可以保留，覆盖更新不需要重新添加设备或提供接入密钥。旧出口的残留 DNS 连接仍需最多约三十秒回收，升级后应等待旧状态退出再复测。
+
+### Security impact
+
+不提高连接额度，不关闭 DNSSEC / TLS，不要求关闭浏览器安全 DNS，不回退其他出口或手机物理 DNS。仅选中 shell UID 是隔离测试配置，不写入正式安装包或真实用户的账号配置。外部 Go 探针由 adb 运行，不进入 APK，也不是客户端 sidecar。
+
+### Tests
+
+- Rust fmt / clippy、68 项普通测试、两项显式官方兼容向量、真实 TUN / 官方 tsnet / ACL / 子网 / DERP 回退恢复通过。
+- Go 隔离夹具 build / vet / test / race 通过；探针单次与整体期限有界，单测验证每轮确实查询指定解析器而不是应用缓存。
+- Flutter analyze / 51 项测试、native 主机与 ARM64 clippy、3 项生命周期测试、双 ABI 原生构建与双安卓红绿对照通过。
+- 原物理手机仍需覆盖安装本版后复测；不将以上隔离测试写成真实使用端已恢复。
+- 最终混淆 Release 同签名覆盖、原身份无密钥恢复、双栈 TCP、系统 MagicDNS、真实 DNS 页面及停止清理通过；Kotlin 单测、Debug / Release lint、两 ABI 的 JNI / 签名 / 16 KiB 对齐通过。
+- 内核源提交 CI `39619538447` 通过。额外的本地 Linux musl 构建因缺少 `x86_64-linux-musl-gcc` 工具链未完成，不计入通过项；本次只发布 Android 安装包，不发布 Linux CLI 二进制。

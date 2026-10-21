@@ -165,6 +165,9 @@ printf 'PASS 普通 UID 经 Android Bionic/netd 解析公网域名（不以 ICMP
 touch "$directory/$client_serial-probe-installed"
 "$adb" -s "$client_serial" push "$core/target/compat-web-probe" /data/local/tmp/xunara-exit-pair-probe >/dev/null
 "$adb" -s "$client_serial" shell chmod 700 /data/local/tmp/xunara-exit-pair-probe
+"$adb" -s "$client_serial" shell "/data/local/tmp/xunara-exit-pair-probe -mode dns-burst -listen '$dns_ip:53' -target cloudflare.com" >"$directory/dns-burst.log"
+grep -q '^PASS DNS burst lookups=64 ' "$directory/dns-burst.log"
+printf 'PASS 仅选中 shell UID 的连续 64 次解析，不依赖 Android 内核替用户态 DNS 连接补发 RST\n'
 "$adb" -s "$client_serial" shell "SSL_CERT_DIR=/apex/com.android.conscrypt/cacerts:/system/etc/security/cacerts /data/local/tmp/xunara-exit-pair-probe -mode web-probe -listen '$dns_ip:53'" >"$directory/public-https.log"
 grep -q '^PASS verified HTTPS status=200 bytes=' "$directory/public-https.log"
 printf 'PASS 普通 UID 经安卓出口解析域名并取得真实 HTTPS 页面，证书链与主机名校验通过\n'
